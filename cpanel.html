@@ -1,0 +1,415 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>AC LiNa · DESARROLLOS — Panel</title>
+<style>
+  :root { --bg:#0f1115; --panel:#171a20; --border:#2a2f3a; --txt:#e9edf5; --muted:#a9b1be; }
+  * { box-sizing: border-box; }
+  body { margin:0; font-family: system-ui,-apple-system,Segoe UI,Roboto,Arial; background:var(--bg); color:var(--txt); overflow-x:hidden; }
+
+  /* Header */
+  header { position:sticky; top:0; z-index:10; display:grid; grid-template-columns:1fr auto auto auto; gap:12px; align-items:center;
+           padding:12px 16px; background:#10131a; border-bottom:1px solid var(--border); }
+  .logo-wrap { display:flex; flex-direction:column; }
+  .logo { height:40px; display:block; }
+  .fallback-logo { display:none; font-weight:800; letter-spacing:.18em; }
+  .slogan { font-size:12px; color:#dfe6f4; opacity:.9; letter-spacing:.28em; }
+  .controls { display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
+  .chip { display:inline-flex; gap:8px; align-items:center; padding:6px 10px; border:1px solid var(--border); border-radius:999px; cursor:pointer; font-size:14px; user-select:none; }
+  .chip .dot { width:12px; height:12px; border-radius:50%; border:1px solid #0005; }
+  .chip.active { outline:2px solid #ffffff22; }
+  .right { display:flex; gap:8px; align-items:center; }
+  button, input[type="search"] { background:#141821; color:#fff; border:1px solid var(--border); border-radius:10px; padding:8px 12px; font-size:14px; cursor:pointer; }
+  input[type="search"] { width:220px; }
+  .toggle { background:#141821; border:1px solid var(--border); border-radius:10px; padding:8px 12px; }
+  .toggle.active { outline:2px solid #ffffff22; }
+
+  /* Board: columnas fijas. Cada lista es un grid 2×N (tarjetas cuadradas) */
+  .board { display:grid; grid-template-columns: repeat(5, 1fr); gap:16px; padding:16px; }
+  .col { background:var(--panel); border:1px solid var(--border); border-radius:14px; padding:12px; display:flex; flex-direction:column;
+         height: calc(100vh - 160px); min-height:420px; }
+  .col h2 { margin:0 0 10px; font-size:16px; color:#dde3ef; letter-spacing:.2px; }
+  .list { flex:1 1 auto; overflow-y:auto; padding-right:4px; display:grid; grid-template-columns: repeat(2, 1fr); gap:10px; }
+  .col.dragover { outline:2px dashed #8ea1c6; outline-offset:-6px; }
+
+  /* Tarjetas cuadradas */
+  .card { position:relative; border-radius:14px; padding:10px; cursor:grab; box-shadow:0 6px 18px rgba(0,0,0,.22);
+          border:1px solid rgba(255,255,255,.22); display:grid; grid-template-rows: auto 1fr auto; gap:6px; height:170px; }
+  .card:active { transform:none; }
+  .topline { font-weight:800; font-size:14px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .subline { font-size:13px; opacity:.95; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .notes { font-size:12px; line-height:1.2; opacity:.92; overflow:hidden; }
+  .thumb { position:absolute; left:10px; top:28px; width:56px; height:56px; border-radius:10px; border:1px solid #0003; background:#0002;
+           display:flex; align-items:center; justify-content:center; overflow:hidden; }
+  .thumb img { width:100%; height:100%; object-fit:cover; }
+  .content { margin-left:66px; }
+  .badge-cat { position:absolute; top:6px; left:10px; font-size:11px; opacity:.95; padding:2px 8px; border-radius:999px; background:#00000022; }
+  .badge-ingreso { position:absolute; top:6px; right:10px; font-size:12px; opacity:.9; }
+  .badge-promesa { position:absolute; bottom:6px; right:10px; font-size:12px; opacity:.95; }
+
+  /* Borde con estela girando */
+  .card::after{ content:""; position:absolute; inset:0; border-radius:14px; padding:2px; pointer-events:none; display:none;
+                -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0); -webkit-mask-composite:xor; mask-composite:exclude;
+                animation: spin 2.8s linear infinite; }
+  .ring-soon { border-color: rgba(255, 90, 90, .65) !important; }
+  .ring-late { border-color: rgba(176, 0, 32, .9)  !important; }
+  .ring-soon::after { display:block; background: conic-gradient(from var(--angle,0deg), transparent 0 30%, rgba(255,90,90,.85) 34%, transparent 42% 100%); }
+  .ring-late::after { display:block; background: conic-gradient(from var(--angle,0deg), transparent 0 28%, rgba(255,160,160,.35) 32%, transparent 40% 100%); }
+  @keyframes spin { to { --angle: 1turn; } }
+
+  /* Diálogos */
+  dialog { border:none; border-radius:14px; padding:0; background:#161a22; color:var(--txt); min-width:min(860px, 96vw); }
+  .dlg-head { display:flex; align-items:center; justify-content:space-between; padding:14px 16px; border-bottom:1px solid var(--border); }
+  .dlg-body { padding:14px 16px; display:grid; grid-template-columns: 1fr 320px; gap:14px; }
+  .dlg-actions { padding:12px 16px; border-top:1px solid var(--border); display:flex; gap:8px; justify-content:flex-end; }
+  .form-row { display:flex; gap:8px; align-items:center; margin-bottom:10px; }
+  input[type="text"], input[type="date"], input[type="url"], textarea, select {
+    width:100%; background:#121722; color:var(--txt); border:1px solid var(--border); border-radius:10px; padding:10px 12px; font-size:15px;
+  }
+  textarea { min-height:100px; resize:vertical; }
+  .preview { border:1px dashed var(--border); border-radius:12px; padding:10px; display:flex; flex-direction:column; gap:8px; align-items:center; justify-content:center; }
+  .preview img { max-width:100%; max-height:220px; border-radius:10px; border:1px solid var(--border); object-fit:cover; }
+  .helper { font-size:12px; color:var(--muted); }
+  .btn-danger { background:#3a1f22; border-color:#5a2730; }
+  .btn-primary { background:#2a5bd7; border-color:#2a5bd7; }
+
+  /* Barra archivar overlay (no mueve layout) */
+  .archive-gutter { position:fixed; top:0; right:0; width:120px; height:100vh; background:linear-gradient(90deg,transparent,rgba(255,255,255,.08));
+                    display:flex; align-items:center; justify-content:center; color:#fff; font-weight:600; border-left:1px solid var(--border);
+                    z-index:20; transform:translateX(100%); transition:transform .15s ease; pointer-events:none; }
+  .archive-gutter.show { transform:translateX(0); pointer-events:auto; }
+  .archive-gutter span{ transform:rotate(-90deg); opacity:.8; }
+
+  #fabAdd { position:fixed; right:18px; bottom:18px; width:56px; height:40px; border-radius:10px; background:#2a5bd7; border:none; color:#fff;
+            font-size:16px; box-shadow:0 6px 18px rgba(0,0,0,.35); cursor:pointer; }
+
+  @media (max-width:1100px){ .board{ grid-template-columns:1fr; } .col{ height: calc(100vh - 200px); } .dlg-body{ grid-template-columns:1fr; } }
+</style>
+</head>
+<body>
+<header>
+  <div class="logo-wrap">
+    <img class="logo" src="logo.png" alt="AC LiNa" onerror="this.style.display='none';this.nextElementSibling.style.display='block';">
+    <div class="fallback-logo">AC LiNa</div>
+    <div class="slogan">DESARROLLOS</div>
+  </div>
+  <div class="controls" id="legend"></div>
+  <div>
+    <button id="btnT1" class="toggle active">Turno 1</button>
+    <button id="btnT2" class="toggle active">Turno 2</button>
+  </div>
+  <div class="right">
+    <input id="search" type="search" placeholder="Buscar…" />
+    <button id="btnPresets">Presets</button>
+    <button id="btnArchive">Archivo</button>
+    <button id="btnSettings">Ajustes</button>
+  </div>
+</header>
+
+<main class="board">
+  <section class="col" data-col="recepcion"><h2>Recepción</h2><div class="list" id="recepcion"></div></section>
+  <section class="col" data-col="diagnostico"><h2>Diagnóstico</h2><div class="list" id="diagnostico"></div></section>
+  <section class="col" data-col="reparacion"><h2>Reparación</h2><div class="list" id="reparacion"></div></section>
+  <section class="col" data-col="listo"><h2>Listo</h2><div class="list" id="listo"></div></section>
+  <section class="col" data-col="entregado"><h2>Entregado</h2><div class="list" id="entregado"></div></section>
+</main>
+
+<div id="archiveGutter" class="archive-gutter"><span>Soltar para archivar</span></div>
+
+<!-- Diálogo tarjeta -->
+<dialog id="cardDialog">
+  <form method="dialog" id="cardForm">
+    <div class="dlg-head"><strong id="dlgTitle">Nueva tarjeta</strong><button type="button" id="dlgClose">Cerrar</button></div>
+    <div class="dlg-body">
+      <div>
+        <div class="form-row"><label style="min-width:110px;">OT</label><input id="fOT" type="text" required /></div>
+        <div class="form-row"><label style="min-width:110px;">Producto</label><input id="fProducto" type="text" required /></div>
+        <div class="form-row"><label style="min-width:110px;">Cliente</label><input id="fCliente" type="text" required /></div>
+        <div class="form-row"><label style="min-width:110px;">A cargo</label>
+          <select id="fTurno"><option value="T1">TURNO 1</option><option value="T2">TURNO 2</option></select></div>
+        <div class="form-row"><label style="min-width:110px;">Notas</label><textarea id="fNotes"></textarea></div>
+        <div class="form-row"><label style="min-width:110px;">Categoría</label><select id="fCategory"></select></div>
+        <div class="form-row"><label style="min-width:110px;">Ingreso</label><input id="fIngreso" type="date" />
+                                <label style="min-width:90px;">Prometida</label><input id="fPrometida" type="date" required /></div>
+        <div class="form-row"><label style="min-width:110px;">Imagen URL</label><input id="fImageUrl" type="url" placeholder="https://…" /></div>
+        <div class="form-row"><label style="min-width:110px;">Imagen archivo</label><input id="fImageFile" type="file" accept="image/*" /></div>
+        <div class="helper">Si subís archivo, se guarda como DataURL.</div>
+      </div>
+      <div><div class="preview"><div class="helper">Vista previa</div><img id="previewImg" alt="" style="display:none;" /><div class="helper" id="imgInfo"></div></div></div>
+    </div>
+    <div class="dlg-actions">
+      <button type="button" class="btn-danger" id="btnDelete" style="display:none;">Eliminar</button>
+      <div style="flex:1"></div>
+      <button type="button" id="btnCancel">Cancelar</button>
+      <button type="submit" class="btn-primary">Guardar</button>
+    </div>
+  </form>
+</dialog>
+
+<!-- Presets -->
+<dialog id="presetsDialog">
+  <form method="dialog" id="presetsForm">
+    <div class="dlg-head"><strong>Colores de categorías</strong><button type="button" id="pDlgClose">Cerrar</button></div>
+    <div class="dlg-body" style="grid-template-columns:1fr;">
+      <div id="presetsList"></div><div class="helper">Se aplican a todas las tarjetas de esa categoría.</div>
+    </div>
+    <div class="dlg-actions"><button type="button" id="btnPresetsCancel">Cancelar</button><button type="submit" class="btn-primary">Guardar</button></div>
+  </form>
+</dialog>
+
+<!-- Archivo -->
+<dialog id="archiveDialog">
+  <div class="dlg-head"><strong>Archivo</strong><button type="button" id="aDlgClose">Cerrar</button></div>
+  <div class="dlg-body" style="grid-template-columns:1fr;">
+    <input id="archiveSearch" type="search" placeholder="Buscar en archivo…" />
+    <div id="archiveList" style="margin-top:10px;"></div>
+  </div>
+  <div class="dlg-actions"><button type="button" id="btnArchiveClose">Cerrar</button></div>
+</dialog>
+
+<!-- Ajustes -->
+<dialog id="settingsDialog">
+  <form method="dialog" id="settingsForm">
+    <div class="dlg-head"><strong>Ajustes</strong><button type="button" id="sDlgClose">Cerrar</button></div>
+    <div class="dlg-body" style="grid-template-columns:1fr;">
+      <div class="form-row"><label style="min-width:220px;">Umbral próximo a entrega (horas)</label><input id="sDueSoon" type="number" min="12" max="168" step="6" /></div>
+      <div class="form-row"><label style="min-width:220px;">Días laborables (L a D)</label><div id="sWorkdays"></div></div>
+      <div class="helper">Sábados y domingos desactivados por defecto.</div>
+    </div>
+    <div class="dlg-actions"><button type="button" id="btnSettingsCancel">Cancelar</button><button type="submit" class="btn-primary">Guardar</button></div>
+  </form>
+</dialog>
+
+<button id="fabAdd">Nuevo</button>
+
+<footer style="padding:10px 16px; color:var(--muted); font-size:13px; border-top:1px solid var(--border);">
+  Doble clic en tarjeta para editar. Arrastrá entre columnas. Arrastrá al borde derecho para archivar. Se guarda automáticamente.
+</footer>
+
+<script type="module">
+/* ================== Firebase ================== */
+import { initializeApp } from 'https://www.gstatic.com/firebasejs/11.0.1/firebase-app.js';
+import { getFirestore, doc, getDoc, setDoc, onSnapshot, enableIndexedDbPersistence } from 'https://www.gstatic.com/firebasejs/11.0.1/firebase-firestore.js';
+import { getAuth, signInAnonymously, onAuthStateChanged } from 'https://www.gstatic.com/firebasejs/11.0.1/firebase-auth.js';
+
+const firebaseConfig = {
+  apiKey: "AIzaSyB-Mx5Qqwg6KFMJSA-yUb-DFo7UjfqCpKY",
+  authDomain: "aclinadev.firebaseapp.com",
+  projectId: "aclinadev",
+  storageBucket: "aclinadev.firebasestorage.app",
+  messagingSenderId: "401991392253",
+  appId: "1:401991392253:web:92400bc5d2503ed6879794",
+};
+
+const app = initializeApp(firebaseConfig);
+const db = getFirestore(app);
+const auth = getAuth(app);
+const stateRef = doc(db, 'kanban', 'ac-lina');
+enableIndexedDbPersistence(db).catch(()=>{});
+
+/* ================== Estado base ================== */
+let data = {
+  presets: [
+    { key:'p1', name:'Presupuestos', color:'#2D9CDB' },
+    { key:'p2', name:'Aceptado',     color:'#27AE60' },
+    { key:'p3', name:'No Aceptado',  color:'#EB5757' },
+    { key:'p4', name:'Garantía T',   color:'#9B51E0' },
+    { key:'p5', name:'Garantía F',   color:'#F2994A' },
+    { key:'p6', name:'Tareas Extra', color:'#E2B93B' },
+  ],
+  settings: { dueSoonHours: 42, workdays: [1,1,1,1,1,0,0] },
+  recepcion:[], diagnostico:[], reparacion:[], listo:[], entregado:[], archivo:[]
+};
+
+/* ================== Helpers/UI ================== */
+const $ = s => document.querySelector(s), $$ = s => document.querySelectorAll(s);
+let dragId=null, currentEdit={id:null,col:'recepcion'}, activeFilters=new Set(), showT1=true, showT2=true;
+
+function uid(){ return 'id'+Math.random().toString(36).slice(2,9); }
+function getPreset(key){ return data.presets.find(p=>p.key===key) || data.presets[0]; }
+function luminance(hex){ const c=hex.replace('#',''); const r=parseInt(c.slice(0,2),16)/255, g=parseInt(c.slice(2,4),16)/255, b=parseInt(c.slice(4,6),16)/255;
+  const lin=x=>x<=0.03928?x/12.92:Math.pow((x+0.055)/1.055,2.4); return 0.2126*lin(r)+0.7152*lin(g)+0.0722*lin(b); }
+function idealTextColor(bg){ return (luminance(bg)<0.5)?'#ffffff':'#111111'; }
+function outlineColor(bg){ return (idealTextColor(bg)==='#ffffff') ? '#ffffff30' : '#00000022'; }
+function fmtDate(d){ if(!d) return ''; const [y,m,dd]=d.split('-'); return `${dd}/${m}`; }
+function parseISO(s){ if(!s) return null; const d=new Date(s+'T00:00:00'); d.setHours(0,0,0,0); return d; }
+function businessHoursUntil(from,to,wd){ if(!from||!to) return 0; const s=new Date(from); s.setHours(0,0,0,0); const e=new Date(to); e.setHours(0,0,0,0);
+  if(s.getTime()===e.getTime()) return wd[s.getDay()]?24:0; const dir=e>s?1:-1; let c=new Date(s),h=0; while((dir>0&&c<e)||(dir<0&&c>e)){ if(wd[c.getDay()])h+=24*dir; c.setDate(c.getDate()+dir);} return h; }
+function hoursToDue(prom){ if(!prom) return Infinity; const t=new Date(); t.setHours(0,0,0,0); return businessHoursUntil(t, parseISO(prom), data.settings.workdays); }
+
+/* Leyenda */
+function renderLegend(){
+  const box = $('#legend'); box.innerHTML='';
+  for(const p of data.presets){
+    const chip=document.createElement('div'); chip.className='chip'+(activeFilters.size&&!activeFilters.has(p.key)?'':' active'); chip.dataset.key=p.key;
+    const dot=document.createElement('span'); dot.className='dot'; dot.style.background=p.color;
+    chip.appendChild(dot); chip.appendChild(document.createTextNode(p.name));
+    chip.addEventListener('click',()=>{ if(!activeFilters.size)activeFilters.add(p.key); else if(activeFilters.has(p.key))activeFilters.delete(p.key); else activeFilters.add(p.key); render();});
+    box.appendChild(chip);
+  }
+}
+
+/* Tarjeta */
+function cardNode(card){
+  const preset=getPreset(card.category||'p1'); const bg=preset.color, fg=idealTextColor(bg), ol=outlineColor(bg);
+  const wrap=document.createElement('div'); wrap.className='card'; wrap.dataset.id=card.id; wrap.setAttribute('draggable','true');
+  wrap.style.background=bg; wrap.style.color=fg; wrap.style.borderColor=ol; wrap.style.textShadow=(fg==='#ffffff')?'0 1px 2px rgba(0,0,0,.45)':'0 1px 0 rgba(255,255,255,.15)';
+  const hrs=hoursToDue(card.prometida); if(hrs<=0) wrap.classList.add('ring-late'); else if(hrs<=data.settings.dueSoonHours) wrap.classList.add('ring-soon');
+
+  const bCat=document.createElement('div'); bCat.className='badge-cat'; bCat.textContent=preset.name;
+  const bIng=document.createElement('div'); bIng.className='badge-ingreso'; bIng.textContent=card.ingreso?`Ing: ${fmtDate(card.ingreso)}`:'';
+  const bPro=document.createElement('div'); bPro.className='badge-promesa'; bPro.textContent=card.prometida?`Prom: ${fmtDate(card.prometida)}`:'';
+
+  const thumb=document.createElement('div'); thumb.className='thumb';
+  if(card.image){ const im=document.createElement('img'); im.src=card.image; thumb.appendChild(im); } else { thumb.style.border='1px dashed #0003'; thumb.innerHTML='<div style="opacity:.6;font-size:11px">sin imagen</div>'; }
+
+  const content=document.createElement('div'); content.className='content';
+  const l1=document.createElement('div'); l1.className='topline'; l1.textContent=`${card.ot||''} - ${card.producto||''}`.replace(/\s-\s$/,'');
+  const turnoTxt=card.turno==='T2'?'T_2':'T_1';
+  const l2=document.createElement('div'); l2.className='subline'; l2.textContent=`${card.cliente||''} - ${turnoTxt}`;
+  const notes=document.createElement('div'); notes.className='notes'; notes.textContent=(card.notes||'').trim();
+
+  content.appendChild(l1); content.appendChild(l2); if((card.notes||'').trim()) content.appendChild(notes);
+  wrap.appendChild(thumb); wrap.appendChild(content); wrap.appendChild(bCat); wrap.appendChild(bIng); wrap.appendChild(bPro);
+
+  wrap.addEventListener('dragstart',()=>{ dragId=card.id; showArchiveGutter(true); });
+  wrap.addEventListener('dragend', ()=>{ showArchiveGutter(false); });
+  wrap.addEventListener('dblclick',()=> openEditor(card.id));
+
+  const q=($('#search').value||'').toLowerCase(), hay=t=>(t||'').toLowerCase().includes(q);
+  const hitsText=hay(card.ot)||hay(card.producto)||hay(card.cliente)||hay(card.notes);
+  const hitsFilter=(!activeFilters.size)||activeFilters.has(card.category);
+  const hitsShift=(card.turno==='T1'?showT1:showT2);
+  if(!(hitsText&&hitsFilter&&hitsShift)) wrap.style.display='none';
+
+  return wrap;
+}
+
+function render(){
+  renderLegend();
+  for(const col of ['recepcion','diagnostico','reparacion','listo','entregado']){
+    const list=document.getElementById(col); list.innerHTML='';
+    const arr=[...(data[col]||[])].sort((a,b)=>(a.prometida||'9999-12-31').localeCompare(b.prometida||'9999-12-31'));
+    for(const c of arr) list.appendChild(cardNode(c));
+  }
+}
+
+/* ================== Editor ================== */
+const dlg=$('#cardDialog'), fOT=$('#fOT'), fProd=$('#fProducto'), fCli=$('#fCliente'), fTurno=$('#fTurno'),
+      fNotes=$('#fNotes'), fCat=$('#fCategory'), fIng=$('#fIngreso'), fPro=$('#fPrometida'),
+      fImgUrl=$('#fImageUrl'), fImgFile=$('#fImageFile'), pImg=$('#previewImg'), pInfo=$('#imgInfo');
+
+function fillCategories(){ fCat.innerHTML=''; for(const p of data.presets){ const o=document.createElement('option'); o.value=p.key; o.textContent=p.name; fCat.appendChild(o); } }
+function openNew(col='recepcion'){ currentEdit={id:null,col}; $('#dlgTitle').textContent='Nueva tarjeta'; $('#btnDelete').style.display='none';
+  fillCategories(); fOT.value=''; fProd.value=''; fCli.value=''; fTurno.value='T1'; fNotes.value='';
+  const d=new Date().toISOString().slice(0,10); fIng.value=d; fPro.value=d; fCat.value=data.presets[0]?.key||'p1';
+  fImgUrl.value=''; fImgFile.value=''; pImg.style.display='none'; pImg.src=''; pInfo.textContent=''; dlg.showModal(); fOT.focus(); }
+function findCard(id){ for(const k of ['recepcion','diagnostico','reparacion','listo','entregado']){ const i=data[k].findIndex(x=>x.id===id); if(i>=0) return {col:k,idx:i,card:data[k][i]}; } return null; }
+function openEditor(id){ const f=findCard(id); if(!f) return; currentEdit={id,col:f.col}; $('#dlgTitle').textContent='Editar tarjeta'; $('#btnDelete').style.display='inline-block';
+  fillCategories(); fOT.value=f.card.ot||''; fProd.value=f.card.producto||''; fCli.value=f.card.cliente||''; fTurno.value=f.card.turno||'T1';
+  fNotes.value=f.card.notes||''; fIng.value=f.card.ingreso||''; fPro.value=f.card.prometida||''; fCat.value=f.card.category||data.presets[0]?.key||'p1';
+  if(f.card.image){ pImg.src=f.card.image; pImg.style.display='block'; pInfo.textContent=f.card.image.startsWith('data:')?'DataURL':''; } else { pImg.style.display='none'; pImg.src=''; pInfo.textContent=''; }
+  fImgUrl.value=(f.card.image && !f.card.image.startsWith('data:'))?f.card.image:''; fImgFile.value=''; dlg.showModal(); }
+
+$('#cardForm').addEventListener('submit',(e)=>{ e.preventDefault();
+  const obj={ ot:fOT.value.trim(), producto:fProd.value.trim(), cliente:fCli.value.trim(), turno:fTurno.value, notes:fNotes.value,
+              ingreso:fIng.value||null, prometida:fPro.value||null, category:fCat.value };
+  if(pImg.style.display==='block'&&pImg.src) obj.image=pImg.src; else if(fImgUrl.value.trim()) obj.image=fImgUrl.value.trim();
+  if(!currentEdit.id){ obj.id=uid(); data[currentEdit.col].unshift(obj); } else { const f=findCard(currentEdit.id); if(f){ data[f.col][f.idx]={ id:f.card.id, ...obj }; } }
+  dlg.close(); render(); scheduleSave();
+});
+$('#btnDelete').addEventListener('click',()=>{ if(!currentEdit.id)return; const f=findCard(currentEdit.id); if(f){ data[f.col].splice(f.idx,1); render(); scheduleSave(); } dlg.close(); });
+$('#btnCancel').addEventListener('click',()=> dlg.close()); $('#dlgClose').addEventListener('click',()=> dlg.close());
+
+/* Imagen preview */
+function bytesOfDataURL(str){ if(!str||!str.startsWith('data:')) return 0; const b64=str.split(',')[1]||''; return Math.ceil(b64.length*3/4); }
+fImgFile.addEventListener('change',()=>{ const file=fImgFile.files?.[0]; if(!file) return; const r=new FileReader(); r.onload=()=>{ pImg.src=r.result; pImg.style.display='block'; pInfo.textContent=`DataURL ~${(bytesOfDataURL(r.result)/1024).toFixed(1)} KB`; }; r.readAsDataURL(file); });
+fImgUrl.addEventListener('input',()=>{ const u=fImgUrl.value.trim(); if(u){ pImg.src=u; pImg.style.display='block'; pInfo.textContent='Imagen por URL'; } else if(!fImgFile.files?.length){ pImg.style.display='none'; pImg.src=''; pInfo.textContent=''; }});
+
+/* DnD columnas */
+$$('.col').forEach(col=>{
+  col.addEventListener('dragover', e=>{ e.preventDefault(); col.classList.add('dragover'); });
+  col.addEventListener('dragleave', ()=> col.classList.remove('dragover'));
+  col.addEventListener('drop', e=>{ e.preventDefault(); col.classList.remove('dragover'); if(!dragId) return;
+    const target=col.getAttribute('data-col'); let card=null;
+    for(const k of ['recepcion','diagnostico','reparacion','listo','entregado']){ const i=data[k].findIndex(x=>x.id===dragId); if(i>=0){ card=data[k].splice(i,1)[0]; break; } }
+    if(card){ data[target].unshift(card); render(); scheduleSave(); } dragId=null; showArchiveGutter(false);
+  });
+  col.addEventListener('dblclick',(e)=>{ if(['H2','DIV','SECTION'].includes(e.target.tagName)) openNew(col.getAttribute('data-col')); });
+});
+document.addEventListener('dragstart', e=>{ const n=e.target?.closest?.('.card'); if(n){ dragId=n.dataset.id; showArchiveGutter(true);} });
+document.addEventListener('dragend', ()=> showArchiveGutter(false));
+
+/* Archivo overlay */
+const gutter=$('#archiveGutter'); let isOverArchive=false;
+function showArchiveGutter(show){ gutter.classList.toggle('show', !!show); }
+window.addEventListener('dragover',(e)=>{ if(!dragId) return; isOverArchive=(window.innerWidth-e.clientX)<120; showArchiveGutter(isOverArchive); e.preventDefault(); });
+window.addEventListener('drop',(e)=>{ e.preventDefault(); if(!dragId){ isOverArchive=false; showArchiveGutter(false); return; }
+  if(isOverArchive){ let moved=null, fromCol=null; for(const k of ['recepcion','diagnostico','reparacion','listo','entregado']){ const i=data[k].findIndex(x=>x.id===dragId); if(i>=0){ moved=data[k].splice(i,1)[0]; fromCol=k; break; } }
+    if(moved){ moved.lastColumn=fromCol; data.archivo.unshift(moved); render(); scheduleSave(); } }
+  dragId=null; isOverArchive=false; showArchiveGutter(false);
+});
+
+/* Archivo modal */
+const aDlg=$('#archiveDialog'); $('#btnArchive').addEventListener('click',()=>{ buildArchiveList(); aDlg.showModal(); });
+$('#aDlgClose').addEventListener('click',()=> aDlg.close()); $('#btnArchiveClose').addEventListener('click',()=> aDlg.close());
+$('#archiveSearch').addEventListener('input', buildArchiveList);
+function buildArchiveList(){ const q=($('#archiveSearch').value||'').toLowerCase(); const box=$('#archiveList'); box.innerHTML='';
+  for(const c of data.archivo){ const hay=t=>(t||'').toLowerCase().includes(q); if(!(hay(c.ot)||hay(c.producto)||hay(c.cliente)||hay(c.notes))) continue;
+    const row=document.createElement('div'); row.style.display='grid'; row.style.gridTemplateColumns='1fr auto'; row.style.gap='6px';
+    row.style.padding='8px 10px'; row.style.border='1px solid var(--border)'; row.style.borderRadius='10px'; row.style.marginBottom='8px';
+    row.innerHTML=`<div><strong>${c.ot||''}</strong> · ${c.producto||''} · ${c.cliente||''}<div class="helper">${c.notes||''}</div></div>`;
+    const btn=document.createElement('button'); btn.textContent='Restaurar'; btn.addEventListener('click',()=>{ const i=data.archivo.findIndex(x=>x.id===c.id);
+      if(i>=0){ const last=c.lastColumn||'recepcion'; data.archivo.splice(i,1); delete c.lastColumn; (data[last]||data.recepcion).unshift(c); buildArchiveList(); render(); scheduleSave(); }});
+    row.appendChild(btn); box.appendChild(row);
+  }
+}
+
+/* Presets */
+const pDlg=$('#presetsDialog'); $('#btnPresets').addEventListener('click',()=>{ buildPresetsForm(); pDlg.showModal(); });
+$('#pDlgClose').addEventListener('click',()=> pDlg.close()); $('#btnPresetsCancel').addEventListener('click',()=> pDlg.close());
+function buildPresetsForm(){ const box=$('#presetsList'); box.innerHTML=''; for(const p of data.presets){ const row=document.createElement('div'); row.className='form-row';
+  const name=document.createElement('input'); name.type='text'; name.value=p.name; name.style.minWidth='220px'; name.disabled=true;
+  const col=document.createElement('input'); col.type='color'; col.value=p.color; row.appendChild(name); row.appendChild(col); row.dataset.key=p.key; box.appendChild(row);} }
+$('#presetsForm').addEventListener('submit',(e)=>{ e.preventDefault(); const rows=Array.from($('#presetsList').children);
+  for(const r of rows){ const key=r.dataset.key; const color=r.querySelector('input[type="color"]').value; const p=getPreset(key); if(p) p.color=color; }
+  pDlg.close(); render(); scheduleSave(); });
+
+/* Ajustes */
+const sDlg=$('#settingsDialog'); $('#btnSettings').addEventListener('click',()=>{ buildSettings(); sDlg.showModal(); });
+$('#sDlgClose').addEventListener('click',()=> sDlg.close()); $('#btnSettingsCancel').addEventListener('click',()=> sDlg.close());
+function buildSettings(){ $('#sDueSoon').value=data.settings.dueSoonHours??42; const box=$('#sWorkdays'); box.innerHTML=''; const labels=['L','M','X','J','V','S','D'];
+  data.settings.workdays=data.settings.workdays||[1,1,1,1,1,0,0]; data.settings.workdays.forEach((v,i)=>{ const label=document.createElement('label'); label.style.marginRight='8px';
+    const cb=document.createElement('input'); cb.type='checkbox'; cb.checked=!!v; cb.addEventListener('change',()=> data.settings.workdays[i]=cb.checked?1:0);
+    label.appendChild(cb); label.appendChild(document.createTextNode(' '+labels[i])); box.appendChild(label); }); }
+$('#settingsForm').addEventListener('submit',(e)=>{ e.preventDefault(); const v=parseInt($('#sDueSoon').value,10); if(!isNaN(v)) data.settings.dueSoonHours=Math.max(12,Math.min(168,v));
+  sDlg.close(); render(); scheduleSave(); });
+
+/* Búsqueda + FAB + Turnos */
+$('#search').addEventListener('input', render); $('#fabAdd').addEventListener('click',()=> openNew('recepcion'));
+const btnT1=$('#btnT1'), btnT2=$('#btnT2'); function toggleT(btn,w){ if(w==='T1'){ showT1=!showT1; btn.classList.toggle('active',showT1); } else { showT2=!showT2; btn.classList.toggle('active',showT2);} render(); }
+btnT1.addEventListener('click',()=> toggleT(btnT1,'T1')); btnT2.addEventListener('click',()=> toggleT(btnT2,'T2'));
+
+/* ================== Firestore load/save en vivo ================== */
+let saving=false, saveTimer=null;
+function scheduleSave(){ clearTimeout(saveTimer); saveTimer=setTimeout(async ()=>{ try{ saving=true; await setDoc(stateRef, data, {merge:true}); } finally{ setTimeout(()=>saving=false,150);} }, 300); }
+async function loadFromFirestore(){
+  const snap = await getDoc(stateRef);
+  if (snap.exists()){
+    const incoming=snap.data()||{};
+    data.presets = Array.isArray(incoming.presets)?incoming.presets:data.presets;
+    data.settings= { ...data.settings, ...(incoming.settings||{}) };
+    for(const k of ['recepcion','diagnostico','reparacion','listo','entregado','archivo']) data[k]=Array.isArray(incoming[k])?incoming[k]:[];
+  } else { await setDoc(stateRef, data); }
+  render();
+}
+onSnapshot(stateRef,(snap)=>{ if(!snap.exists()||saving) return; const incoming=snap.data()||{};
+  data.presets=incoming.presets||data.presets; data.settings=incoming.settings||data.settings;
+  for(const k of ['recepcion','diagnostico','reparacion','listo','entregado','archivo']) data[k]=incoming[k]||data[k]; render(); });
+
+onAuthStateChanged(auth, async (user)=>{ if(!user){ try{ await signInAnonymously(auth);}catch{} } await loadFromFirestore(); });
+</script>
+</body>
+</html>

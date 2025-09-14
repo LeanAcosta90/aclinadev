@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>AC LiNa · DESARROLLOS — TV</title>
+<style>
+  :root { --bg:#0f1115; --panel:#171a20; --border:#2a2f3a; --txt:#e9edf5; --muted:#a9b1be; }
+  * { box-sizing: border-box; }
+  body { margin:0; font-family: system-ui,-apple-system,Segoe UI,Roboto,Arial; background:var(--bg); color:var(--txt); overflow-x:hidden; }
+  header { position:sticky; top:0; z-index:5; display:flex; align-items:flex-end; justify-content:space-between; gap:16px; padding:12px 16px; background:#10131a; border-bottom:1px solid var(--border); }
+  .brand { display:flex; gap:12px; align-items:center; }
+  .logo { height:40px; }
+  .slogan { font-size:12px; color:#dfe6f4; opacity:.9; letter-spacing:.28em; margin-top:2px; }
+  .legend { display:flex; gap:10px; flex-wrap:wrap; align-items:center; }
+  .chip { display:inline-flex; gap:8px; align-items:center; padding:6px 10px; border:1px solid var(--border); border-radius:999px; font-size:14px; }
+  .chip .dot { width:12px; height:12px; border-radius:50%; border:1px solid #0005; }
+
+  .board { display:grid; grid-template-columns: repeat(5, 1fr); gap:16px; padding:16px; }
+  .col { background:var(--panel); border:1px solid var(--border); border-radius:14px; padding:12px; display:flex; flex-direction:column; height: calc(100vh - 140px); min-height:420px; }
+  .col h2 { margin:0 0 10px; font-size:16px; color:#dde3ef; letter-spacing:.2px; }
+  .list { flex:1 1 auto; overflow-y:auto; padding-right:4px; display:grid; grid-template-columns: repeat(2, 1fr); gap:10px; }
+
+  .card { position:relative; border-radius:14px; padding:10px; cursor:default; box-shadow:0 6px 18px rgba(0,0,0,.22);
+          border:1px solid rgba(255,255,255,.22); display:grid; grid-template-rows:auto 1fr auto; gap:6px; height:170px; }
+  .topline { font-weight:800; font-size:14px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .subline { font-size:13px; opacity:.95; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .notes { font-size:12px; line-height:1.2; opacity:.92; overflow:hidden; }
+  .thumb { position:absolute; left:10px; top:28px; width:56px; height:56px; border-radius:10px; border:1px solid #0003; background:#0002; display:flex; align-items:center; justify-content:center; overflow:hidden; }
+  .thumb img { width:100%; height:100%; object-fit:cover; }
+  .content { margin-left:66px; }
+  .badge-cat { position:absolute; top:6px; left:10px; font-size:11px; opacity:.95; padding:2px 8px; border-radius:999px; background:#00000022; }
+  .badge-ingreso { position:absolute; top:6px; right:10px; font-size:12px; opacity:.9; }
+  .badge-promesa { position:absolute; bottom:6px; right:10px; font-size:12px; opacity:.95; }
+
+  .card::after{ content:""; position:absolute; inset:0; border-radius:14px; padding:2px; pointer-events:none; display:none;
+                -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0); -webkit-mask-composite:xor; mask-composite:exclude;
+                animation: spin 2.8s linear infinite; }
+  .ring-soon { border-color: rgba(255, 90, 90, .65) !important; }
+  .ring-late { border-color: rgba(176, 0, 32, .9) !important; }
+  .ring-soon::after { display:block; background: conic-gradient(from var(--angle,0deg), transparent 0 30%, rgba(255,90,90,.85) 34%, transparent 42% 100%); }
+  .ring-late::after { display:block; background: conic-gradient(from var(--angle,0deg), transparent 0 28%, rgba(255,160,160,.35) 32%, transparent 40% 100%); }
+  @keyframes spin { to { --angle: 1turn; } }
+
+  @media (max-width:1100px){ .board{ grid-template-columns:1fr; } .col{ height: calc(100vh - 160px); } }
+</style>
+</head>
+<body>
+<header>
+  <div class="brand">
+    <img class="logo" src="logo.png" alt="AC LiNa" onerror="this.style.display='none'">
+    <div><div style="font-weight:800; letter-spacing:.18em;">AC LiNa</div><div class="slogan">DESARROLLOS</div></div>
+  </div>
+  <div class="legend" id="legend"></div>
+</header>
+
+<main class="board">
+  <section class="col"><h2>Recepción</h2><div class="list" id="recepcion"></div></section>
+  <section class="col"><h2>Diagnóstico</h2><div class="list" id="diagnostico"></div></section>
+  <section class="col"><h2>Reparación</h2><div class="list" id="reparacion"></div></section>
+  <section class="col"><h2>Listo</h2><div class="list" id="listo"></div></section>
+  <section class="col"><h2>Entregado</h2><div class="list" id="entregado"></div></section>
+</main>
+
+<script type="module">
+import { initializeApp } from 'https://www.gstatic.com/firebasejs/11.0.1/firebase-app.js';
+import { getFirestore, doc, onSnapshot } from 'https://www.gstatic.com/firebasejs/11.0.1/firebase-firestore.js';
+
+const firebaseConfig = {
+  apiKey: "AIzaSyB-Mx5Qqwg6KFMJSA-yUb-DFo7UjfqCpKY",
+  authDomain: "aclinadev.firebaseapp.com",
+  projectId: "aclinadev",
+  storageBucket: "aclinadev.firebasestorage.app",
+  messagingSenderId: "401991392253",
+  appId: "1:401991392253:web:92400bc5d2503ed6879794",
+};
+
+const app = initializeApp(firebaseConfig);
+const db = getFirestore(app);
+const stateRef = doc(db, 'kanban', 'ac-lina');
+
+let data={ presets:[], settings:{dueSoonHours:42, workdays:[1,1,1,1,1,0,0]}, recepcion:[], diagnostico:[], reparacion:[], listo:[], entregado:[] };
+const $ = s=>document.querySelector(s);
+
+function idealTextColor(hex){ if(!hex) return '#fff'; const c=hex.replace('#',''); const r=parseInt(c.slice(0,2),16)/255, g=parseInt(c.slice(2,4),16)/255, b=parseInt(c.slice(4,6),16)/255;
+  const lin=x=>x<=0.03928?x/12.92:Math.pow((x+0.055)/1.055,2.4); const L=0.2126*lin(r)+0.7152*lin(g)+0.0722*lin(b); return L<0.5?'#ffffff':'#111111'; }
+function fmtDate(d){ if(!d) return ''; const [y,m,dd]=d.split('-'); return `${dd}/${m}`; }
+function parseISO(s){ if(!s)return null; const d=new Date(s+'T00:00:00'); d.setHours(0,0,0,0); return d; }
+function businessHoursUntil(from,to,wd){ if(!from||!to) return 0; const s=new Date(from); s.setHours(0,0,0,0); const e=new Date(to); e.setHours(0,0,0,0);
+  if(s.getTime()===e.getTime()) return wd[s.getDay()]?24:0; const dir=e>s?1:-1; let c=new Date(s),h=0; while((dir>0&&c<e)||(dir<0&&c>e)){ if(wd[c.getDay()])h+=24*dir; c.setDate(c.getDate()+dir);} return h; }
+function hoursToDue(prom){ if(!prom) return Infinity; const t=new Date(); t.setHours(0,0,0,0); return businessHoursUntil(t, parseISO(prom), data.settings.workdays||[1,1,1,1,1,0,0]); }
+
+function renderLegend(){ const box=$('#legend'); box.innerHTML=''; (data.presets||[]).forEach(p=>{ const el=document.createElement('div'); el.className='chip';
+  const dot=document.createElement('span'); dot.className='dot'; dot.style.background=p.color; el.appendChild(dot); el.appendChild(document.createTextNode(p.name)); box.appendChild(el); }); }
+
+function cardNode(card){
+  const p=(data.presets||[]).find(x=>x.key===card.category)||data.presets[0]; const bg=p?.color||'#3a3f4b'; const fg=idealTextColor(bg);
+  const wrap=document.createElement('div'); wrap.className='card'; wrap.style.background=bg; wrap.style.color=fg; wrap.style.textShadow=(fg==='#ffffff')?'0 1px 2px rgba(0,0,0,.45)':'0 1px 0 rgba(255,255,255,.15)';
+  const hrs=hoursToDue(card.prometida); if(hrs<=0) wrap.classList.add('ring-late'); else if(hrs<= (data.settings?.dueSoonHours ?? 42)) wrap.classList.add('ring-soon');
+  const bCat=document.createElement('div'); bCat.className='badge-cat'; bCat.textContent=p?.name||''; const bIng=document.createElement('div'); bIng.className='badge-ingreso'; bIng.textContent=card.ingreso?`Ing: ${fmtDate(card.ingreso)}`:''; const bPro=document.createElement('div'); bPro.className='badge-promesa'; bPro.textContent=card.prometida?`Prom: ${fmtDate(card.prometida)}`:'';
+  const thumb=document.createElement('div'); thumb.className='thumb'; if(card.image){ const im=document.createElement('img'); im.src=card.image; thumb.appendChild(im);} else { thumb.style.border='1px dashed #0003'; thumb.innerHTML='<div style="opacity:.6;font-size:11px">sin imagen</div>'; }
+  const content=document.createElement('div'); content.className='content';
+  const l1=document.createElement('div'); l1.className='topline'; l1.textContent=`${card.ot||''} - ${card.producto||''}`.replace(/\s-\s$/,'');
+  const turnoTxt=card.turno==='T2'?'T_2':'T_1'; const l2=document.createElement('div'); l2.className='subline'; l2.textContent=`${card.cliente||''} - ${turnoTxt}`;
+  const notes=document.createElement('div'); notes.className='notes'; notes.textContent=(card.notes||'').trim();
+  content.appendChild(l1); content.appendChild(l2); if((card.notes||'').trim()) content.appendChild(notes);
+  wrap.appendChild(thumb); wrap.appendChild(content); wrap.appendChild(bCat); wrap.appendChild(bIng); wrap.appendChild(bPro); return wrap;
+}
+
+function render(){ renderLegend(); ['recepcion','diagnostico','reparacion','listo','entregado'].forEach(col=>{ const list=document.getElementById(col); list.innerHTML='';
+  (data[col]||[]).slice().sort((a,b)=>(a.prometida||'9999-12-31').localeCompare(b.prometida||'9999-12-31')).forEach(c=> list.appendChild(cardNode(c))); }); }
+
+onSnapshot(stateRef,(snap)=>{ if(!snap.exists()) return; const incoming=snap.data()||{}; data.presets=incoming.presets||[]; data.settings=incoming.settings||data.settings;
+  ['recepcion','diagnostico','reparacion','listo','entregado'].forEach(k=> data[k]=incoming[k]||[]); render(); });
+</script>
+</body>
+</html>
