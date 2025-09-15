@@ -1,0 +1,203 @@
+/* ===== Reset básico ===== */
+* { box-sizing: border-box; }
+html, body { height: 100%; }
+body {
+  margin: 0;
+  background: #0f1115;
+  color: #e9edf5;
+  font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial;
+}
+
+/* ===== Topbar ===== */
+#topbar {
+  position: sticky; top: 0; z-index: 30;
+  display: grid; grid-template-columns: 1fr auto auto;
+  gap: 12px; align-items: center;
+  padding: 12px 16px;
+  background: #10131a; border-bottom: 1px solid #2a2f3a;
+}
+.brand { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.brand .logo-wrap { display: flex; align-items: flex-start; gap: 8px; }
+.brand .logo { height: 38px; display: block; }
+.brand .title { font-weight: 800; letter-spacing: .14em; line-height: 1; }
+.brand .slogan { font-size: 11px; opacity: .85; letter-spacing: .28em; margin-top: 2px; }
+
+.controls { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.legend .chip {
+  display: inline-flex; align-items: center; gap: 8px;
+  padding: 6px 10px; border: 1px solid #2a2f3a; border-radius: 999px; user-select: none; cursor: pointer;
+  font-size: 14px;
+}
+.legend .chip .dot { width: 12px; height: 12px; border-radius: 50%; border: 1px solid #0005; }
+.legend .chip.active { outline: 2px solid #ffffff22; }
+
+.right { display: flex; align-items: center; gap: 8px; }
+.right input[type="search"], .right button {
+  background: #141821; color: #e9edf5; border: 1px solid #2a2f3a; border-radius: 10px; padding: 8px 12px; font-size: 14px;
+}
+.right .toggle.active { outline: 2px solid #ffffff22; }
+
+/* ===== Board: 5 columnas fijas ===== */
+.board {
+  display: grid; grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 16px; padding: 16px;
+}
+
+/* Cada columna es fija; el scroll es interno */
+.col {
+  display: flex; flex-direction: column; min-width: 0;
+  background: #171a20; border: 1px solid #2a2f3a; border-radius: 14px; padding: 12px;
+  height: calc(100vh - 160px); /* aprox header+footer */
+  min-height: 420px;
+}
+.col h2 { margin: 0 0 10px; font-size: 16px; color: #dde3ef; letter-spacing: .2px; flex: 0 0 auto; }
+
+/* Contenedor de tarjetas: grid interno 3×N, sin mover columna */
+.list {
+  flex: 1 1 0; min-width: 0;
+  display: grid; grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+  grid-auto-rows: 20em; /* altura base de cada card (escala interna en em) */
+  overflow: auto; padding-right: 4px;
+  scrollbar-gutter: stable both-edges; /* evita saltos por aparición de scroll */
+}
+.col.dragover { outline: 2px dashed #8ea1c6; outline-offset: -6px; }
+
+/* ===== Tarjeta compacta (imagen abajo) =====
+   Todo en em con escala fluida —> la card se escala parejo en TV/celular */
+.card {
+  --scale: clamp(10px, 0.9vw, 14px);
+  font-size: var(--scale);
+
+  position: relative;
+  display: flex; flex-direction: column;
+  background: #171a20;
+  border: .12em solid rgba(255,255,255,.2);
+  border-radius: 1em;
+  padding: .8em;
+
+  /* sombreado suave */
+  box-shadow: 0 .4em 1.2em rgba(0,0,0,.35);
+
+  /* arrastre visual */
+  cursor: grab;
+}
+.card:active { cursor: grabbing; opacity: .7; }
+
+/* Estado / categoría en su línea (no tapa título) */
+.estado {
+  align-self: flex-start;
+  font-size: .9em; font-weight: 600;
+  padding: .2em .6em;
+  border-radius: 999px;
+  background: #2D9CDB; /* color por defecto, se sobreescribe por JS */
+  margin-bottom: .3em;
+  max-width: 75%;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+
+/* Fechas */
+.badge-ingreso, .badge-promesa {
+  position: absolute; font-size: .8em; opacity: .9;
+  background: rgba(0,0,0,.18); border: 1px solid rgba(255,255,255,.12);
+  padding: .25em .5em; border-radius: 999px;
+}
+.badge-ingreso { top: .5em; right: .7em; }
+.badge-promesa { bottom: .5em; right: .7em; }
+
+/* Título y líneas de info */
+.titulo   { font-size: 1.05em; font-weight: 800; line-height: 1.2;
+            white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.sec      { font-size: .95em; line-height: 1.2; opacity: .96;
+            white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.det      { font-size: .9em;  line-height: 1.2; opacity: .9;
+            white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-top: .25em; }
+
+/* Imagen abajo: ocupa el ancho, alto fijo relativo a la escala */
+.thumb-bottom {
+  width: 100%;
+  height: 6em;              /* ajusta “alto reservado” de imagen */
+  margin-top: .6em;
+  border-radius: .6em;
+  object-fit: cover;        /* llena sin deformar */
+  background: #0b0e14;      /* placeholder si no hay imagen */
+  border: 1px solid rgba(255,255,255,.08);
+}
+
+/* ===== Anillo giratorio (due soon / late) ===== */
+.card::after {
+  content: ""; position: absolute; inset: 0; border-radius: 1em; padding: .15em;
+  pointer-events: none; display: none;
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor; mask-composite: exclude;
+  animation: spin 2.8s linear infinite;
+}
+.ring-soon { border-color: rgba(255, 90, 90, .65) !important; }
+.ring-late { border-color: rgba(176, 0, 32, .9)  !important; }
+.ring-soon::after { display: block; background:
+  conic-gradient(from var(--angle,0deg), transparent 0 30%, rgba(255,90,90,.85) 34%, transparent 42% 100%); }
+.ring-late::after { display: block; background:
+  conic-gradient(from var(--angle,0deg), transparent 0 28%, rgba(255,160,160,.35) 32%, transparent 40% 100%); }
+@keyframes spin { to { --angle: 1turn; } }
+
+/* ===== Gutter de Archivo (overlay, no mueve layout) ===== */
+.archive-gutter {
+  position: fixed; top: 0; right: 0; width: 120px; height: 100vh;
+  background: linear-gradient(90deg, transparent, rgba(255,255,255,.08));
+  display: flex; align-items: center; justify-content: center;
+  color: #fff; font-weight: 600; letter-spacing: .06em;
+  border-left: 1px solid #2a2f3a;
+  z-index: 50; transform: translateX(100%); transition: transform .15s ease;
+  pointer-events: none;
+}
+.archive-gutter.show { transform: translateX(0); pointer-events: auto; }
+.archive-gutter span { transform: rotate(-90deg); opacity: .8; }
+
+/* ===== Dialogs (estética general) ===== */
+dialog {
+  border: none; border-radius: 14px; padding: 0;
+  background: #161a22; color: #e9edf5;
+  min-width: min(860px, 96vw);
+}
+.dlg-head {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 12px 14px; border-bottom: 1px solid #2a2f3a;
+}
+.dlg-body {
+  padding: 12px 14px; display: grid; grid-template-columns: 1fr 320px; gap: 12px;
+}
+.dlg-body.single { grid-template-columns: 1fr; }
+.dlg-actions {
+  padding: 12px 14px; border-top: 1px solid #2a2f3a; display: flex; gap: 8px; justify-content: flex-end;
+}
+.form-row { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
+.form-row.group { gap: 16px; }
+.form-row.group .sub { flex: 1 1 0; display: flex; gap: 8px; align-items: center; }
+label { min-width: 110px; font-size: 14px; color: #dfe6f4; }
+input[type="text"], input[type="date"], input[type="url"], textarea, select {
+  width: 100%; background: #121722; color: #e9edf5; border: 1px solid #2a2f3a; border-radius: 10px; padding: 10px 12px; font-size: 14px;
+}
+textarea { min-height: 90px; resize: vertical; }
+.preview { border: 1px dashed #2a2f3a; border-radius: 12px; padding: 10px; display: flex; flex-direction: column; align-items: center; gap: 8px; }
+.preview img { max-width: 100%; max-height: 220px; border-radius: 10px; border: 1px solid #2a2f3a; object-fit: cover; }
+.helper { font-size: 12px; color: #a9b1be; }
+
+.btn-primary { background: #2a5bd7; border: 1px solid #2a5bd7; color: #fff; padding: 8px 12px; border-radius: 10px; cursor: pointer; }
+.btn-danger  { background: #3a1f22; border: 1px solid #5a2730; color: #fff; padding: 8px 12px; border-radius: 10px; cursor: pointer; }
+#btnPresets, #btnArchive, #btnSettings, #btnExport, #btnLogout { cursor: pointer; }
+
+#footnote {
+  padding: 8px 16px; border-top: 1px solid #2a2f3a; color: #a9b1be; font-size: 12.5px;
+}
+
+/* ===== Responsivo ===== */
+@media (max-width: 1200px) {
+  .list { grid-template-columns: repeat(2, 1fr); grid-auto-rows: 19em; }
+}
+@media (max-width: 800px) {
+  .board { grid-template-columns: 1fr; }
+  .col { height: calc(100vh - 200px); }
+  .list { grid-template-columns: repeat(2, 1fr); grid-auto-rows: 18em; }
+  .dlg-body { grid-template-columns: 1fr; }
+}
+
