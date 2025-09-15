@@ -1,203 +1,22 @@
 <!DOCTYPE html>
 <html lang="es">
 <head>
-<meta charset="utf-8" />
-<meta name="viewport" content="width=device-width,initial-scale=1" />
-<title>ACLiNa · Panel de control</title>
-<style>
-  :root{ --bg:#0f1115; --panel:#171a20; --border:#2a2f3a; --txt:#e9edf5; --muted:#a9b1be; }
-  *{ box-sizing: border-box; }
-  body{ margin:0; font-family: system-ui,-apple-system,Segoe UI,Roboto,Arial; background:var(--bg); color:var(--txt); }
-
-  /* Header */
-  header{ position:sticky; top:0; z-index:10; display:grid;
-    grid-template-columns: 1fr auto auto auto; gap:12px; align-items:center;
-    padding:12px 16px; background:#10131a; border-bottom:1px solid var(--border); }
-  .brand{ display:flex; gap:12px; align-items:center; min-width:0; }
-  .logo-wrap{ display:flex; flex-direction:column; }
-  .logo{ height:40px; display:block; }
-  .fallback-logo{ display:none; font-weight:800; letter-spacing:.18em; }
-  .slogan{ font-size:12px; color:#dfe6f4; opacity:.9; margin-top:2px; letter-spacing:.28em; }
-  .controls{ display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
-  .right{ display:flex; gap:8px; align-items:center; }
-  button,input[type="search"]{ background:#141821; color:var(--txt); border:1px solid var(--border); border-radius:10px; padding:8px 12px; font-size:14px; cursor:pointer; }
-  input[type="search"]{ width:220px; }
-  .toggle{ background:#141821; border:1px solid var(--border); border-radius:10px; padding:8px 12px; }
-  .toggle.active{ outline:2px solid #ffffff22; }
-
-  /* Board fijo */
-  .board{ display:grid; grid-template-columns: repeat(5, 1fr); gap:16px; padding:16px; }
-  .col{
-    background:var(--panel); border:1px solid var(--border); border-radius:14px; padding:12px;
-    position:relative; display:flex; flex-direction:column;
-    height: calc(100vh - 160px); min-height:480px;  /* fijo: no cambia */
-  }
-  .col h2{ margin:0 0 10px 0; font-size:16px; color:#dde3ef; letter-spacing:.2px; flex:0 0 auto; }
-  .list{
-    flex:1 1 auto; overflow-y:auto; padding-right:4px; scrollbar-gutter: stable both-edges;
-    display:grid; grid-template-columns: repeat(3, 1fr); gap:10px; align-content:start;
-  }
-  .col.dragover{ outline:2px dashed #8ea1c6; outline-offset:-6px; }
-
-  /* Card */
-  .card{
-    position:relative; display:grid; grid-template-columns: 56px 1fr; gap:8px;
-    border-radius:12px; padding:12px 10px 18px; border:1px solid rgba(255,255,255,.22);
-    box-shadow: 0 6px 18px rgba(0,0,0,.22); cursor:grab; min-height:120px; user-select:none;
-  }
-  .card:active{ transform:none; }
-  .img{ width:56px; height:56px; border-radius:10px; border:1px solid #0003; background:#0002; overflow:hidden; display:flex; align-items:center; justify-content:center; }
-  .img img{ width:100%; height:100%; object-fit:cover; }
-  .main{ padding-right:70px; }
-  .line1{ font-weight:800; font-size:14px; line-height:1.2; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
-  .line2{ margin-top:2px; font-size:13px; line-height:1.2; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; opacity:.96; }
-  .notes{ margin-top:4px; opacity:.95; font-size:12px; line-height:1.2; max-height:1.4em; overflow:hidden; }
-
-  .badge-cat{ position:absolute; top:6px; left:8px; font-size:11px; padding:2px 8px; border-radius:999px; background:#00000022; border:1px solid #0003; cursor:pointer; }
-  .badge-ingreso{ position:absolute; top:6px; right:8px; font-size:11px; opacity:.9; }
-  .badge-promesa{ position:absolute; bottom:6px; right:8px; font-size:11px; opacity:.95; }
-  .hidden{ display:none !important; }
-  .placeholder{ border:2px dashed #8ea1c6; border-radius:12px; height:120px; }
-
-  /* Borde con estela (solo marco) */
-  .card::after{
-    content:""; position:absolute; inset:0; border-radius:12px; padding:2px; pointer-events:none; display:none;
-    -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
-    -webkit-mask-composite: xor; mask-composite: exclude; animation: spin 2.8s linear infinite;
-  }
-  .ring-soon{ border-color: rgba(255, 90, 90, .65) !important; }
-  .ring-late{ border-color: rgba(176, 0, 32, .9)  !important; }
-  .ring-soon::after{ display:block; background: conic-gradient(from var(--angle,0deg), transparent 0 30%, rgba(255,90,90,.85) 34%, transparent 42% 100%); }
-  .ring-late::after{ display:block; background: conic-gradient(from var(--angle,0deg), transparent 0 28%, rgba(255,160,160,.35) 32%, transparent 40% 100%); }
-  @keyframes spin{ to{ --angle: 1turn; } }
-
-  /* Menú de categoría */
-  .menu{
-    position:fixed; z-index:99; background:#121722; border:1px solid var(--border); border-radius:12px; min-width:220px;
-    box-shadow:0 10px 32px rgba(0,0,0,.45); padding:6px; display:none;
-  }
-  .menu .item{
-    display:flex; align-items:center; gap:10px; padding:8px 10px; border-radius:10px; cursor:pointer;
-  }
-  .menu .item:hover{ background:#1a2130; }
-  .menu .swatch{ width:14px; height:14px; border-radius:50%; border:1px solid #0005; }
-
-  /* Dialog */
-  dialog{ border:none; border-radius:14px; padding:0; background:#161a22; color:var(--txt); min-width:min(860px, 96vw); }
-  .dlg-head{ display:flex; align-items:center; justify-content:space-between; padding:14px 16px; border-bottom:1px solid var(--border); }
-  .dlg-body{ padding:14px 16px; display:grid; grid-template-columns: 1fr 320px; gap:14px; }
-  .dlg-actions{ padding:12px 16px; border-top:1px solid var(--border); display:flex; gap:8px; justify-content:flex-end; }
-  .form-row{ display:flex; gap:8px; align-items:center; margin-bottom:10px; }
-  input[type="text"], input[type="date"], input[type="url"], textarea, select{
-    width:100%; background:#121722; color:var(--txt); border:1px solid var(--border); border-radius:10px; padding:10px 12px; font-size:15px;
-  }
-  textarea{ min-height:100px; resize:vertical; }
-  .preview{ border:1px dashed var(--border); border-radius:12px; padding:10px; display:flex; flex-direction:column; gap:8px; align-items:center; justify-content:center; }
-  .preview img{ max-width:100%; max-height:220px; border-radius:10px; border:1px solid var(--border); object-fit:cover; }
-  .btn-danger{ background:#3a1f22; border-color:#5a2730; }
-  .btn-primary{ background:#2a5bd7; border-color:#2a5bd7; }
-
-  footer{ padding:10px 16px; color:var(--muted); font-size:13px; border-top:1px solid var(--border); }
-
-  @media (max-width:1100px){
-    .board{ grid-template-columns:1fr; }
-    .col{ height: calc(100vh - 200px); }
-    .dlg-body{ grid-template-columns:1fr; }
-    .list{ grid-template-columns: repeat(2, 1fr); }
-  }
-</style>
-</head>
-<body>
-<header>
-  <div class="brand">
-    <div class="logo-wrap">
-      <img class="logo" src="/logo.png" alt="ACLiNa" onerror="this.style.display='none';this.nextElementSibling.style.display='block';">
-      <div class="fallback-logo">ACLiNa</div>
-      <div class="slogan">DESARROLLOS</div>
-    </div>
-  </div>
-
-  <div class="controls" id="legend"></div>
-
-  <div class="right">
-    <button id="btnBoth" class="toggle">Ambos</button>
-    <button id="btnT1" class="toggle">Turno 1</button>
-    <button id="btnT2" class="toggle">Turno 2</button>
-    <input id="search" type="search" placeholder="Buscar…" />
-    <button id="btnExport">Exportar CSV</button>
-    <button id="btnLogout">Salir</button>
-  </div>
-</header>
-
-<main class="board">
-  <section class="col" data-col="recepcion"><h2>Recepción</h2><div class="list" id="recepcion"></div></section>
-  <section class="col" data-col="diagnostico"><h2>Diagnóstico</h2><div class="list" id="diagnostico"></div></section>
-  <section class="col" data-col="reparacion"><h2>Reparación</h2><div class="list" id="reparacion"></div></section>
-  <section class="col" data-col="listo"><h2>Listo</h2><div class="list" id="listo"></div></section>
-  <section class="col" data-col="entregado"><h2>Entregado</h2><div class="list" id="entregado"></div></section>
-</main>
-
-<!-- Menú rápido de categoría -->
-<div id="catMenu" class="menu"></div>
-
-<!-- Editor -->
-<dialog id="cardDialog">
-  <form method="dialog" id="cardForm">
-    <div class="dlg-head">
-      <strong id="dlgTitle">Nueva tarjeta</strong>
-      <button type="button" id="dlgClose">Cerrar</button>
-    </div>
-    <div class="dlg-body">
-      <div>
-        <div class="form-row"><label style="min-width:110px;">OT</label><input id="fOT" type="text" placeholder="OT-000000" required/></div>
-        <div class="form-row"><label style="min-width:110px;">Producto</label><input id="fProducto" type="text" placeholder="Producto" required/></div>
-        <div class="form-row"><label style="min-width:110px;">Cliente</label><input id="fCliente" type="text" placeholder="Nombre del cliente" required/></div>
-        <div class="form-row">
-          <label style="min-width:110px;">A cargo</label>
-          <select id="fTurno">
-            <option value="T1">TURNO 1</option>
-            <option value="T2">TURNO 2</option>
-          </select>
-        </div>
-        <div class="form-row"><label style="min-width:110px;">Notas</label><textarea id="fNotes" placeholder="Detalles…"></textarea></div>
-        <div class="form-row">
-          <label style="min-width:110px;">Categoría</label>
-          <select id="fCategory"></select>
-        </div>
-        <div class="form-row">
-          <label style="min-width:110px;">Ingreso</label>
-          <input id="fIngreso" type="date"/>
-          <label style="min-width:90px;">Prometida</label>
-          <input id="fPrometida" type="date" required/>
-        </div>
-        <div class="form-row"><label style="min-width:110px;">Imagen URL</label><input id="fImageUrl" type="url" placeholder="https://…"/></div>
-      </div>
-      <div>
-        <div class="preview">
-          <div class="helper">Vista previa</div>
-          <img id="previewImg" alt="" style="display:none;"/>
-          <div class="helper" id="imgInfo"></div>
-        </div>
-      </div>
-    </div>
-    <div class="dlg-actions">
-      <button type="button" class="btn-danger" id="btnDelete" style="display:none;">Eliminar</button>
-      <div style="flex:1"></div>
-      <button type="button" id="btnCancel">Cancelar</button>
-      <button type="submit" class="btn-primary" id="btnSave">Guardar</button>
-    </div>
-  </form>
-</dialog>
-
-<footer>
-  Doble clic en tarjeta para editar. Arrastrá entre tarjetas (orden manual). Se sincroniza con la TV en tiempo real.
-</footer>
-
-<script type="module">
-/* ================= Firebase ================= */
-import { initializeApp } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-app.js";
-import { getAuth, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-auth.js";
-import { getFirestore, doc, getDoc, setDoc, onSnapshot, serverTimestamp, updateDoc } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-firestore.js";
+  <meta charset="UTF-8">
+  <title>ACLiNa · Login</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <style>
+    body { font-family: system-ui, sans-serif; background:#0f1115; color:#fff; display:flex; align-items:center; justify-content:center; height:100vh; margin:0; }
+    .box { background:#171a20; padding:24px; border-radius:12px; width:320px; text-align:center; }
+    h1 { margin:0 0 16px; font-size:22px; }
+    input,button { width:100%; padding:10px; margin:6px 0; border-radius:8px; border:1px solid #333; background:#141821; color:#fff; }
+    .btn-primary { background:#2a5bd7; border:none; cursor:pointer; }
+    .hidden { display:none; }
+    #qrBox { margin-top:16px; }
+  </style>
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-app.js";
+    import { getAuth, signInWithEmailAndPassword, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-auth.js";
+    import { getFirestore, doc, getDoc } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-firestore.js";
 
 const firebaseConfig = {
   apiKey: "AIzaSyB-Mx5Qqwg6KFMJSA-yUb-DFo7UjfqCpKY",
@@ -207,474 +26,64 @@ const firebaseConfig = {
   messagingSenderId: "401991392253",
   appId: "1:401991392253:web:92400bc5d2503ed6879794",
 };
+    const app = initializeApp(firebaseConfig);
+    const auth = getAuth(app);
+    const db = getFirestore(app);
 
-const app = initializeApp(firebaseConfig);
-const auth = getAuth(app);
-const db = getFirestore(app);
+    const form = document.getElementById("loginForm");
+    const btnPanel = document.getElementById("btnPanel");
+    const btnDisplay = document.getElementById("btnDisplay");
 
-/* ================= Estado ================= */
-let state = {
-  presets: [
-    { key:'p1', name:'Presupuestos', color:'#2D9CDB' },
-    { key:'p2', name:'Aceptado',     color:'#27AE60' },
-    { key:'p3', name:'No Aceptado',  color:'#EB5757' },
-    { key:'p4', name:'Garantía T',   color:'#9B51E0' },
-    { key:'p5', name:'Garantía F',   color:'#F2994A' },
-    { key:'p6', name:'Tareas Extra', color:'#E2B93B' },
-  ],
-  settings: { dueSoonHours: 42, workdays: [1,1,1,1,1,0,0] },
-  recepcion: [], diagnostico: [], reparacion: [], listo: [], entregado: []
-};
-let displayCtrl = { activeTurn: 'both' }; // espejo de /kanban/display
-let currentUser = null;
-let editing = false;
-let idIndex = new Map(); // id -> {col, idx}
-let showTurn = 'both';   // both | T1 | T2  (espejado a /kanban/display)
-let unsubState = null, unsubDisplay = null;
+    form.addEventListener("submit", async (e)=>{
+      e.preventDefault();
+      const email = form.email.value;
+      const pass = form.pass.value;
+      try {
+        await signInWithEmailAndPassword(auth,email,pass);
+      } catch(err){ alert(err.message); }
+    });
 
-/* ================= Helpers ================= */
-const $ = s => document.querySelector(s);
-function uid(){ return 'id'+Math.random().toString(36).slice(2,9); }
-function getPreset(k){ return state.presets.find(p=>p.key===k) || state.presets[0]; }
-function luminance(hex){
-  const c = (hex||'#000').replace('#','').padEnd(6,'0'); const r=parseInt(c.slice(0,2),16)/255, g=parseInt(c.slice(2,4),16)/255, b=parseInt(c.slice(4,6),16)/255;
-  const f = x => (x<=0.03928)? x/12.92 : Math.pow((x+0.055)/1.055,2.4);
-  return 0.2126*f(r)+0.7152*f(g)+0.0722*f(b);
-}
-function textOn(bg){ return (luminance(bg)<0.5) ? '#fff' : '#111'; }
-function outlineOn(bg){ return textOn(bg)==='#fff' ? '#ffffff33' : '#00000022'; }
-function fmtDM(d){ if(!d) return ''; const [y,m,day]=d.split('-'); return `${day}/${m}`; }
-function parseISO(d){ if(!d) return null; const t=new Date(d+'T00:00:00'); t.setHours(0,0,0,0); return t; }
-function businessHoursUntil(from,to,workdays){
-  if(!from||!to) return 0; const s=new Date(from); s.setHours(0,0,0,0); const e=new Date(to); e.setHours(0,0,0,0);
-  if(s.getTime()===e.getTime()) return workdays[s.getDay()]?24:0;
-  const dir=(e>s)?1:-1; let cur=new Date(s), hours=0;
-  while((dir>0 && cur<e)||(dir<0 && cur>e)){ if(workdays[cur.getDay()]) hours+=24*dir; cur.setDate(cur.getDate()+dir); if(Math.abs((cur-s)/(1000*3600*24))>10000) break; }
-  return hours;
-}
-function hoursToDue(promISO){
-  if(!promISO) return Infinity; const today=new Date(); today.setHours(0,0,0,0); const prom=parseISO(promISO);
-  return businessHoursUntil(today,prom,state.settings.workdays);
-}
-function buildIdIndex(){
-  idIndex.clear();
-  ['recepcion','diagnostico','reparacion','listo','entregado'].forEach(col=>{
-    state[col].forEach((c,idx)=> idIndex.set(c.id,{col,idx}));
-  });
-}
-
-/* ================= Render ================= */
-function renderLegend(){
-  const box = $('#legend'); box.innerHTML='';
-  for(const p of state.presets){
-    const chip=document.createElement('div');
-    chip.className='chip'; chip.style.cssText='display:inline-flex;gap:8px;align-items:center;padding:6px 10px;border:1px solid var(--border);border-radius:999px;cursor:pointer;font-size:14px;user-select:none;';
-    const dot=document.createElement('span'); dot.className='dot'; dot.style.cssText=`width:12px;height:12px;border-radius:50%;border:1px solid #0005;background:${p.color}`;
-    chip.appendChild(dot); chip.appendChild(document.createTextNode(p.name));
-    chip.onclick = ()=>{}; // visual, sin filtro por categoría (si querés, lo activamos luego)
-    box.appendChild(chip);
-  }
-}
-
-function cardNode(card){
-  const preset = getPreset(card.category || 'p1');
-  const bg = preset.color; const fg = textOn(bg); const ol = outlineOn(bg);
-
-  const wrap = document.createElement('div');
-  wrap.className='card'; wrap.dataset.id = card.id;
-  wrap.style.background = bg; wrap.style.color=fg; wrap.style.borderColor = ol;
-  wrap.style.textShadow = (fg==='#fff')?'0 1px 2px rgba(0,0,0,.45)':'0 1px 0 rgba(255,255,255,.15)';
-  wrap.setAttribute('draggable','true');
-
-  // Due ring
-  const hrs = hoursToDue(card.prometida);
-  if (hrs <= 0) wrap.classList.add('ring-late');
-  else if (hrs <= (state.settings?.dueSoonHours ?? 42)) wrap.classList.add('ring-soon');
-
-  // image
-  const imgBox = document.createElement('div'); imgBox.className='img';
-  if (card.image){ const im=document.createElement('img'); im.src=card.image; im.alt=''; imgBox.appendChild(im); }
-  else { imgBox.style.border='1px dashed #0003'; imgBox.innerHTML='<div style="opacity:.6;font-size:11px">sin imagen</div>'; }
-
-  const main=document.createElement('div'); main.className='main';
-  const line1=document.createElement('div'); line1.className='line1'; line1.textContent = `${card.ot||''} — ${card.producto||''}`.replace(/ — $/,'');
-  const turnoTxt = card.turno==='T2'?'T_2':'T_1';
-  const line2=document.createElement('div'); line2.className='line2'; line2.textContent = `${card.cliente||''} — ${turnoTxt}`;
-  const notes=document.createElement('div'); notes.className='notes'; if((card.notes||'').trim()) notes.textContent = card.notes;
-
-  main.appendChild(line1); main.appendChild(line2); if(notes.textContent) main.appendChild(notes);
-
-  const bCat=document.createElement('div'); bCat.className='badge-cat'; bCat.textContent=preset.name;
-  bCat.onclick = (e)=> { e.stopPropagation(); openCategoryMenu(card.id, e.clientX, e.clientY); };
-
-  const bIng=document.createElement('div'); bIng.className='badge-ingreso'; bIng.textContent = card.ingreso? `Ing: ${fmtDM(card.ingreso)}` : '';
-  const bPro=document.createElement('div'); bPro.className='badge-promesa'; bPro.textContent = card.prometida? `Prom: ${fmtDM(card.prometida)}` : '';
-
-  wrap.appendChild(imgBox); wrap.appendChild(main); wrap.appendChild(bCat); wrap.appendChild(bIng); wrap.appendChild(bPro);
-
-  // filtros Turno + búsqueda
-  const q = ($('#search').value||'').toLowerCase();
-  const hay = t => (t||'').toLowerCase().includes(q);
-  const matchesText = hay(card.ot)||hay(card.producto)||hay(card.cliente)||hay(card.notes);
-  const matchesTurn = (showTurn==='both') || (showTurn==='T1' && card.turno==='T1') || (showTurn==='T2' && card.turno==='T2');
-  wrap.style.display = (matchesText && matchesTurn) ? '' : 'none';
-
-  // Doble clic abre editor (sin burbujeo)
-  wrap.addEventListener('dblclick', (e)=>{ e.stopPropagation(); openEditor(card.id); });
-
-  // Drag
-  wrap.addEventListener('dragstart', (e)=> onDragStart(e, card.id));
-  wrap.addEventListener('dragend', onDragEnd);
-
-  return wrap;
-}
-
-function render(){
-  renderLegend();
-  buildIdIndex();
-  const cols = ['recepcion','diagnostico','reparacion','listo','entregado'];
-  for(const c of cols){
-    const list = document.getElementById(c); list.innerHTML='';
-    // ordenar por pos ascendente (fallback por id para estabilidad)
-    const arr = [...(state[c]||[])].sort((a,b)=> (a.pos??0)-(b.pos??0) || a.id.localeCompare(b.id));
-    for(const card of arr){ list.appendChild(cardNode(card)); }
-  }
-}
-
-/* ================= Menú categoría ================= */
-const catMenu = $('#catMenu');
-function openCategoryMenu(id, x, y){
-  catMenu.innerHTML=''; catMenu.style.display='block';
-  catMenu.style.left = x+'px'; catMenu.style.top = y+'px';
-  for(const p of state.presets){
-    const item = document.createElement('div'); item.className='item';
-    const sw = document.createElement('span'); sw.className='swatch'; sw.style.background=p.color;
-    const txt = document.createElement('span'); txt.textContent=p.name;
-    item.appendChild(sw); item.appendChild(txt);
-    item.onclick = async ()=>{ catMenu.style.display='none'; await changeCategory(id, p.key); };
-    catMenu.appendChild(item);
-  }
-}
-document.addEventListener('click', ()=> catMenu.style.display='none');
-
-async function changeCategory(id, key){
-  const loc = idIndex.get(id); if(!loc) return;
-  const card = state[loc.col][loc.idx];
-  card.category = key;
-  card.updatedAt = new Date().toISOString();
-  card.updatedBy = currentUser?.email || 'admin';
-  render(); // optimista
-  await persistState('category', {id, col:loc.col, fields:{category:key}});
-}
-
-/* ================= Editor ================= */
-const dlg = $('#cardDialog');
-const fOT=$('#fOT'), fProd=$('#fProducto'), fCli=$('#fCliente'), fTurno=$('#fTurno'), fNotes=$('#fNotes'), fCat=$('#fCategory'), fIng=$('#fIngreso'), fPro=$('#fPrometida'), fImgUrl=$('#fImageUrl');
-const pImg=$('#previewImg'), pInfo=$('#imgInfo');
-let currentEdit = { id:null, col:'recepcion' };
-
-function fillCategories(){
-  fCat.innerHTML=''; state.presets.forEach(p=>{ const o=document.createElement('option'); o.value=p.key; o.textContent=p.name; fCat.appendChild(o); });
-}
-function openNew(col='recepcion'){
-  editing=true; currentEdit={id:null,col};
-  $('#dlgTitle').textContent='Nueva tarjeta'; $('#btnDelete').style.display='none';
-  fillCategories();
-  fOT.value=''; fProd.value=''; fCli.value=''; fTurno.value='T1'; fNotes.value='';
-  const today = new Date().toISOString().slice(0,10); fIng.value=today; fPro.value=today;
-  fCat.value=state.presets[0]?.key || 'p1'; fImgUrl.value=''; pImg.style.display='none'; pImg.src=''; pInfo.textContent='';
-  dlg.showModal(); fOT.focus();
-}
-function openEditor(id){
-  const loc = idIndex.get(id); if(!loc) { openNew(); return; }
-  editing=true; currentEdit={id, col:loc.col};
-  $('#dlgTitle').textContent='Editar tarjeta'; $('#btnDelete').style.display='inline-block';
-  fillCategories();
-  const card = state[loc.col][loc.idx];
-  fOT.value=card.ot||''; fProd.value=card.producto||''; fCli.value=card.cliente||''; fTurno.value=card.turno||'T1';
-  fNotes.value=card.notes||''; fIng.value=card.ingreso||''; fPro.value=card.prometida||''; fCat.value=card.category||'p1';
-  if(card.image){ pImg.src=card.image; pImg.style.display='block'; pInfo.textContent='Imagen por URL'; } else { pImg.style.display='none'; pImg.src=''; pInfo.textContent=''; }
-  fImgUrl.value = (card.image||'');
-  dlg.showModal();
-}
-$('#cardForm').addEventListener('submit', async (e)=>{
-  e.preventDefault();
-  const obj = {
-    ot: fOT.value.trim(), producto: fProd.value.trim(), cliente: fCli.value.trim(),
-    turno: fTurno.value, notes: fNotes.value, ingreso: fIng.value||null, prometida: fPro.value||null,
-    category: fCat.value, image: fImgUrl.value.trim()||null
-  };
-  if(!currentEdit.id){
-    obj.id = uid();
-    // pos por defecto: ARRIBA de la columna (querías control — lo dejo arriba)
-    const col = currentEdit.col;
-    const minPos = Math.min(...state[col].map(c=>c.pos??0), 0);
-    obj.pos = Math.floor(minPos) - 10;
-    obj.createdAt = new Date().toISOString();
-    obj.updatedAt = obj.createdAt;
-    obj.updatedBy = currentUser?.email || 'admin';
-    state[col].unshift(obj);
-    render();
-    await persistState('create', {col, card:obj});
-  }else{
-    const loc = idIndex.get(currentEdit.id); if(!loc){ dlg.close(); editing=false; return; }
-    const prev = state[loc.col][loc.idx];
-    const merged = { ...prev, ...obj, updatedAt:new Date().toISOString(), updatedBy: currentUser?.email || 'admin' };
-    state[loc.col][loc.idx] = merged;
-    render();
-    await persistState('update', {id:prev.id, col:loc.col, fields:obj});
-  }
-  dlg.close(); editing=false;
-});
-$('#btnDelete').addEventListener('click', async ()=>{
-  if(!currentEdit.id) return;
-  const loc=idIndex.get(currentEdit.id); if(!loc) return;
-  const card=state[loc.col][loc.idx];
-  state[loc.col].splice(loc.idx,1); render();
-  await persistState('delete', {id:card.id, col:loc.col});
-  dlg.close(); editing=false;
-});
-$('#btnCancel').addEventListener('click', ()=>{ dlg.close(); editing=false; });
-$('#dlgClose').addEventListener('click', ()=>{ dlg.close(); editing=false; });
-fImgUrl.addEventListener('input', ()=>{ const u=fImgUrl.value.trim(); if(u){ pImg.src=u; pImg.style.display='block'; pInfo.textContent='Imagen por URL'; } else { pImg.style.display='none'; pImg.src=''; pInfo.textContent=''; }});
-
-/* ================= Drag & Drop con placeholder (orden manual por pos) ================= */
-let drag = { id:null, fromCol:null, placeholder:null };
-
-function onDragStart(e, id){
-  drag.id = id;
-  const loc = idIndex.get(id); drag.fromCol = loc?.col || null;
-  const ph = document.createElement('div'); ph.className='placeholder'; drag.placeholder = ph;
-  e.dataTransfer.effectAllowed='move';
-}
-function onDragEnd(){
-  drag = { id:null, fromCol:null, placeholder:null };
-  document.querySelectorAll('.placeholder').forEach(n=>n.remove());
-}
-
-document.querySelectorAll('.list').forEach(list=>{
-  const col = list.id;
-  list.addEventListener('dragover', (e)=>{
-    e.preventDefault();
-    const after = getCardAfter(list, e.clientX, e.clientY);
-    if(!drag.placeholder) return;
-    if(after == null) list.appendChild(drag.placeholder);
-    else list.insertBefore(drag.placeholder, after);
-  });
-  list.addEventListener('drop', async (e)=>{
-    e.preventDefault();
-    if(!drag.id) return;
-    // calcular pos según placeholder
-    const nodes = Array.from(list.children).filter(n=>n.classList.contains('card') || n===drag.placeholder);
-    const idx = nodes.indexOf(drag.placeholder);
-    const beforeNode = nodes[idx-1] && nodes[idx-1].classList.contains('card') ? nodes[idx-1] : null;
-    const afterNode  = nodes[idx+1] && nodes[idx+1].classList.contains('card') ? nodes[idx+1] : null;
-
-    const beforeId = beforeNode ? beforeNode.dataset.id : null;
-    const afterId  = afterNode  ? afterNode.dataset.id  : null;
-
-    const beforePos = beforeId ? (state[col].find(c=>c.id===beforeId)?.pos ?? 0) : null;
-    const afterPos  = afterId  ? (state[col].find(c=>c.id===afterId )?.pos ?? 0) : null;
-
-    let newPos;
-    if(beforePos==null && afterPos==null){
-      // columna vacía
-      newPos = 0;
-    } else if(beforePos==null){
-      newPos = Math.floor(afterPos) - 10;
-    } else if(afterPos==null){
-      newPos = Math.floor(beforePos) + 10;
-    } else {
-      newPos = (beforePos + afterPos) / 2;
-    }
-
-    // quitar de su columna anterior
-    let src = drag.fromCol;
-    let rec=null, i=-1;
-    if(src){
-      i = state[src].findIndex(c=>c.id===drag.id);
-      if(i>=0){ rec = state[src].splice(i,1)[0]; }
-    }
-    if(!rec){
-      // búsqueda defensiva
-      for(const k of ['recepcion','diagnostico','reparacion','listo','entregado']){
-        const j = state[k].findIndex(c=>c.id===drag.id);
-        if(j>=0){ rec = state[k].splice(j,1)[0]; src=k; break; }
+    onAuthStateChanged(auth, async (user)=>{
+      if(user){
+        // buscar rol en Firestore
+        const ref = doc(db,"users",user.uid);
+        const snap = await getDoc(ref);
+        const role = snap.exists() ? snap.data().role : "user";
+        document.getElementById("loginBox").classList.add("hidden");
+        document.getElementById("modeBox").classList.remove("hidden");
+        if(role==="admin"){
+          btnPanel.classList.remove("hidden");
+        }else{
+          btnPanel.classList.add("hidden");
+        }
+      }else{
+        document.getElementById("loginBox").classList.remove("hidden");
+        document.getElementById("modeBox").classList.add("hidden");
       }
-    }
-    if(!rec){ render(); onDragEnd(); return; }
+    });
 
-    // actualizar destino
-    rec.pos = newPos;
-    rec.updatedAt = new Date().toISOString();
-    rec.updatedBy = currentUser?.email || 'admin';
-    state[col].push(rec); // lo insertamos y render ordena por pos
-    render();
-    onDragEnd();
+    btnPanel.onclick = ()=> location.href="panel.html";
+    btnDisplay.onclick = ()=> location.href="display.html";
+  </script>
+</head>
+<body>
+  <div class="box">
+    <div id="loginBox">
+      <h1>ACLiNa · Login</h1>
+      <form id="loginForm">
+        <input type="email" name="email" placeholder="Email" required />
+        <input type="password" name="pass" placeholder="Contraseña" required />
+        <button class="btn-primary" type="submit">Ingresar</button>
+      </form>
+    </div>
 
-    const to = col;
-    const payload = { id: rec.id, from: src, to, pos: newPos };
-    await persistState('move', payload);
-  });
-
-  // crear nueva con doble clic solo si no se clickeó tarjeta
-  list.parentElement.addEventListener('dblclick', (e)=>{
-    const cardEl = e.target.closest('.card');
-    if(cardEl) return; // si fue sobre card, ya lo maneja la card
-    openNew(col);
-  });
-});
-
-function getCardAfter(container, x, y){
-  const cards = [...container.querySelectorAll('.card')];
-  let closest = null; let closestDist = Number.POSITIVE_INFINITY;
-  for(const c of cards){
-    const r = c.getBoundingClientRect();
-    const cx = r.left + r.width/2;
-    const cy = r.top  + r.height/2;
-    const dist = Math.hypot(cx - x, cy - y);
-    if(dist < closestDist){ closestDist = dist; closest = c; }
-  }
-  // Insertamos placeholder ANTES de la más cercana si el cursor está por encima/izquierda de su centro;
-  if(!closest) return null;
-  const r = closest.getBoundingClientRect();
-  const cx = r.left + r.width/2; const cy = r.top + r.height/2;
-  if(y < cy || (Math.abs(y-cy) < r.height/3 && x < cx)) return closest;
-  return closest.nextSibling;
-}
-
-/* ================= Persistencia Firestore + Audit ================= */
-const DOC_STATE = doc(db,'kanban','ac-lina');
-const DOC_DISPLAY = doc(db,'kanban','display');
-
-function localBackupSave(){
-  try{ localStorage.setItem('aclinaboard', JSON.stringify(state)); }catch(e){}
-}
-function localBackupLoad(){
-  try{
-    const s=localStorage.getItem('aclinaboard'); if(s) state={...state, ...JSON.parse(s)};
-  }catch(e){}
-}
-
-async function loadRemote(){
-  const snap = await getDoc(DOC_STATE);
-  if(snap.exists()){
-    const d = snap.data();
-    // conservar presets/settings locales si no vienen
-    state = {
-      ...state,
-      ...['recepcion','diagnostico','reparacion','listo','entregado'].reduce((acc,k)=> (acc[k]=Array.isArray(d[k])?d[k]:[],acc), {}),
-      presets: Array.isArray(d.presets)? d.presets : state.presets,
-      settings: d.settings ? {...state.settings, ...d.settings} : state.settings
-    };
-  }
-  const dsp = await getDoc(DOC_DISPLAY);
-  if(dsp.exists()) displayCtrl = { ...displayCtrl, ...dsp.data() };
-}
-
-async function persistState(action, payload){
-  // aplicar cambios al doc gigantesco (merge)
-  await setDoc(DOC_STATE, {
-    presets: state.presets,
-    settings: state.settings,
-    recepcion: state.recepcion,
-    diagnostico: state.diagnostico,
-    reparacion: state.reparacion,
-    listo: state.listo,
-    entregado: state.entregado
-  }, { merge:true }).catch(()=>{ /* offline fallback */ });
-
-  // auditoría simple
-  const rec = {
-    ts: serverTimestamp(),
-    by: currentUser?.email || 'admin',
-    action, payload
-  };
-  try {
-    await setDoc(doc(db,'audit', 'a_'+Date.now()+'_'+Math.random().toString(36).slice(2,7)), rec);
-  } catch(e){}
-  localBackupSave();
-}
-
-/* ================= Turnos sincrónicos Panel → Display ================= */
-const btnBoth=$('#btnBoth'), btnT1=$('#btnT1'), btnT2=$('#btnT2');
-function paintTurnButtons(){
-  [btnBoth,btnT1,btnT2].forEach(b=>b.classList.remove('active'));
-  if(showTurn==='both') btnBoth.classList.add('active');
-  if(showTurn==='T1') btnT1.classList.add('active');
-  if(showTurn==='T2') btnT2.classList.add('active');
-}
-async function setActiveTurn(v){
-  showTurn = v; paintTurnButtons(); render();
-  try{ await setDoc(DOC_DISPLAY, { activeTurn:v, updatedAt: serverTimestamp(), updatedBy: currentUser?.email || 'admin' }, { merge:true }); }catch(e){}
-}
-btnBoth.onclick = ()=> setActiveTurn('both');
-btnT1.onclick   = ()=> setActiveTurn('T1');
-btnT2.onclick   = ()=> setActiveTurn('T2');
-
-/* ================= Búsqueda / Export / Logout ================= */
-$('#search').addEventListener('input', render);
-$('#btnExport').addEventListener('click', ()=> exportCSV());
-$('#btnLogout').addEventListener('click', ()=> signOut(auth));
-
-function toCSVRow(arr){ return arr.map(v=>`"${(v??'').toString().replaceAll('"','""')}"`).join(','); }
-function download(name, text){
-  const a=document.createElement('a'); a.href=URL.createObjectURL(new Blob([text],{type:'text/csv'})); a.download=name; a.click();
-}
-function exportCSV(){
-  const cols=['recepcion','diagnostico','reparacion','listo','entregado'];
-  const rows = [['columna','id','pos','ot','producto','cliente','turno','category','ingreso','prometida','image','notes','createdAt','updatedAt','updatedBy']];
-  for(const c of cols){
-    for(const k of state[c]){
-      rows.push([c,k.id,k.pos??'',k.ot||'',k.producto||'',k.cliente||'',k.turno||'',k.category||'',k.ingreso||'',k.prometida||'',k.image||'',k.notes||'',k.createdAt||'',k.updatedAt||'',k.updatedBy||'']);
-    }
-  }
-  const csv = rows.map(r=>toCSVRow(r)).join('\n');
-  download('kanban_estado.csv', csv);
-}
-
-/* ================= Auth & Snapshots ================= */
-onAuthStateChanged(auth, async (user)=>{
-  if(!user){ location.href='index.html'; return; }
-  currentUser = user;
-  localBackupLoad();
-  await loadRemote();
-  render();
-  // snapshot del state (pausado si estás editando)
-  if(unsubState) unsubState();
-  unsubState = onSnapshot(DOC_STATE, (snap)=>{
-    if(!snap.exists()) return;
-    if(editing) return; // no pisar lo que editás
-    const d=snap.data();
-    state = {
-      ...state,
-      ...['recepcion','diagnostico','reparacion','listo','entregado'].reduce((acc,k)=> (acc[k]=Array.isArray(d[k])?d[k]:[],acc), {}),
-      presets: Array.isArray(d.presets)? d.presets : state.presets,
-      settings: d.settings ? {...state.settings, ...d.settings} : state.settings
-    };
-    render(); localBackupSave();
-  });
-  // snapshot de display (para pintar botón localmente si cambió de otro panel)
-  if(unsubDisplay) unsubDisplay();
-  unsubDisplay = onSnapshot(DOC_DISPLAY, (snap)=>{
-    if(!snap.exists()) return;
-    const d=snap.data(); displayCtrl={...displayCtrl,...d};
-    if(d.activeTurn && d.activeTurn!==showTurn){ showTurn=d.activeTurn; paintTurnButtons(); render(); }
-  });
-
-  // activar “Ambos” como default si no hay doc display aún
-  if(!displayCtrl.activeTurn){ await setActiveTurn('both'); }
-});
-
-/* ================= Atajos: crear con doble clic en espacio vacío ================= */
-document.querySelectorAll('.col').forEach(c=>{
-  c.addEventListener('dblclick', (e)=>{
-    const cardEl = e.target.closest('.card');
-    if(cardEl) return; // ya lo maneja la card
-    const col = c.getAttribute('data-col');
-    openNew(col);
-  });
-});
-</script>
+    <div id="modeBox" class="hidden">
+      <h1>Bienvenido</h1>
+      <button id="btnPanel" class="btn-primary hidden">Panel de Control</button>
+      <button id="btnDisplay" class="btn-primary">Pantalla</button>
+    </div>
+  </div>
 </body>
 </html>
+
+
