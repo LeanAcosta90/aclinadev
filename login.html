@@ -5,19 +5,67 @@
   <title>ACLiNa · Login</title>
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <style>
-    body { font-family: system-ui, sans-serif; background:#0f1115; color:#fff; display:flex; align-items:center; justify-content:center; height:100vh; margin:0; }
-    .box { background:#171a20; padding:24px; border-radius:12px; width:320px; text-align:center; }
+    body {
+      font-family: system-ui, sans-serif;
+      background:#0f1115;
+      color:#fff;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      height:100vh;
+      margin:0;
+    }
+    .box {
+      background:#171a20;
+      padding:24px;
+      border-radius:12px;
+      width:320px;
+      text-align:center;
+    }
     h1 { margin:0 0 16px; font-size:22px; }
-    input,button { width:100%; padding:10px; margin:6px 0; border-radius:8px; border:1px solid #333; background:#141821; color:#fff; }
-    .btn-primary { background:#2a5bd7; border:none; cursor:pointer; }
-    .btn-secondary { background:#444; border:none; cursor:pointer; }
+    input,button {
+      width:100%;
+      padding:10px;
+      margin:6px 0;
+      border-radius:8px;
+      border:1px solid #333;
+      background:#141821;
+      color:#fff;
+    }
+    .btn-primary {
+      background:#2a5bd7;
+      border:none;
+      cursor:pointer;
+    }
     .hidden { display:none; }
+    img.logo { width:80px; margin-bottom:12px; }
   </style>
+</head>
+<body>
+  <div class="box">
+    <div id="loginBox">
+      <img src="logo.png" alt="ACLiNa" class="logo">
+      <h1>ACLiNa · Login</h1>
+      <form id="loginForm">
+        <input type="email" name="email" placeholder="Email" required />
+        <input type="password" name="pass" placeholder="Contraseña" required />
+        <button class="btn-primary" type="submit">Ingresar</button>
+      </form>
+    </div>
+
+    <div id="modeBox" class="hidden">
+      <h1>Bienvenido</h1>
+      <button id="btnPanel" class="btn-primary hidden">Panel de Control</button>
+      <button id="btnDisplay" class="btn-primary">Pantalla</button>
+    </div>
+  </div>
+
   <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-app.js";
-    import { getAuth, signInWithEmailAndPassword, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-auth.js";
+    import { getAuth, signInWithEmailAndPassword, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-auth.js";
     import { getFirestore, doc, getDoc } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-firestore.js";
 
+    // Configuración Firebase
     const firebaseConfig = {
       apiKey: "AIzaSyB-Mx5Qqwg6KFMJSA-yUb-DFo7UjfqCpKY",
       authDomain: "aclinadev.firebaseapp.com",
@@ -31,22 +79,22 @@
     const auth = getAuth(app);
     const db = getFirestore(app);
 
+    // Lista de correos admin de fallback
+    const adminEmails = ["leandroacosta_144@hotmail.com"];
+
     const form = document.getElementById("loginForm");
     const btnPanel = document.getElementById("btnPanel");
     const btnDisplay = document.getElementById("btnDisplay");
-    const btnLogout = document.getElementById("btnLogout");
 
-    // Login normal
     form.addEventListener("submit", async (e)=>{
       e.preventDefault();
       const email = form.email.value;
       const pass = form.pass.value;
       try {
         await signInWithEmailAndPassword(auth,email,pass);
-      } catch(err){ alert(err.message); }
+      } catch(err){ alert("Error: "+err.message); }
     });
 
-    // Escucha cambios de sesión
     onAuthStateChanged(auth, async (user)=>{
       if(user){
         let role = "user";
@@ -55,6 +103,9 @@
           const snap = await getDoc(ref);
           if(snap.exists()) role = snap.data().role || "user";
         } catch(e){}
+
+        // fallback por email
+        if(adminEmails.includes(user.email)) role = "admin";
 
         document.getElementById("loginBox").classList.add("hidden");
         document.getElementById("modeBox").classList.remove("hidden");
@@ -70,34 +121,12 @@
       }
     });
 
-    // Botones
     btnPanel.onclick = ()=> location.href="panel.html";
     btnDisplay.onclick = ()=> location.href="display.html";
-    btnLogout.onclick = ()=> {
-      signOut(auth).then(()=> alert("Sesión cerrada correctamente"));
-    }
   </script>
-</head>
-<body>
-  <div class="box">
-    <div id="loginBox">
-      <h1>ACLiNa · Login</h1>
-      <form id="loginForm">
-        <input type="email" name="email" placeholder="Email" required />
-        <input type="password" name="pass" placeholder="Contraseña" required />
-        <button class="btn-primary" type="submit">Ingresar</button>
-      </form>
-    </div>
-
-    <div id="modeBox" class="hidden">
-      <h1>Bienvenido</h1>
-      <button id="btnPanel" class="btn-primary hidden">Panel de Control</button>
-      <button id="btnDisplay" class="btn-primary">Pantalla</button>
-      <button id="btnLogout" class="btn-secondary">Cerrar sesión</button>
-    </div>
-  </div>
 </body>
 </html>
+
 
 
 
