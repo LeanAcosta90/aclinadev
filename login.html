@@ -2,123 +2,153 @@
 <html lang="es">
 <head>
   <meta charset="UTF-8" />
-  <title>ACLiNa · Login</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <base href="./">
+  <title>ACLiNa · Login</title>
   <style>
-    :root{ --bg:#0f1115; --panel:#171a20; --txt:#e9edf5; --border:#2a2f3a; }
+    :root{ --bg:#0f1115; --panel:#171a20; --border:#2a2f3a; --txt:#e9edf5; }
     *{ box-sizing:border-box; }
-    body{ margin:0; font-family:system-ui, -apple-system, Segoe UI, Roboto, Arial; background:var(--bg); color:var(--txt);
-          min-height:100svh; display:grid; place-items:center; }
-    .box{ width:min(380px, 92vw); background:var(--panel); border:1px solid var(--border); border-radius:14px; padding:22px; box-shadow:0 12px 36px rgba(0,0,0,.35); }
-    h1{ margin:0 0 14px; font-size:22px; text-align:center; letter-spacing:.03em; }
-    .logo{ display:block; margin:0 auto 8px; height:40px; }
-    input,button{ width:100%; padding:11px 12px; border-radius:10px; border:1px solid var(--border); background:#141821; color:var(--txt); font-size:15px; }
-    input{ margin:6px 0; }
-    .btn{ cursor:pointer; }
-    .btn-primary{ background:#2a5bd7; border-color:#2a5bd7; }
-    .muted{ opacity:.75; font-size:12px; text-align:center; margin-top:8px; }
-    .hidden{ display:none !important; }
+    body{
+      margin:0; min-height:100vh; display:grid; place-items:center;
+      background:var(--bg); color:var(--txt); font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial;
+    }
+    .box{
+      width:min(360px, 94vw); background:var(--panel); border:1px solid var(--border);
+      border-radius:14px; padding:20px; box-shadow:0 12px 30px rgba(0,0,0,.35);
+    }
+    .brand{ font-weight:800; letter-spacing:.16em; text-align:center; margin-bottom:2px; }
+    .slogan{ text-align:center; font-size:12px; opacity:.85; margin-bottom:14px; letter-spacing:.28em; }
+    h2{ margin:0 0 12px; font-size:18px; text-align:center; }
+    form{ display:grid; gap:8px; }
+    input,button{
+      width:100%; padding:10px 12px; border-radius:10px; border:1px solid var(--border);
+      background:#141821; color:var(--txt); font-size:15px;
+    }
+    button{ cursor:pointer; }
+    .btn-primary{ background:#2a5bd7; border-color:#2a5bd7; color:#fff; }
+    .muted{ font-size:12px; opacity:.8; text-align:center; margin-top:6px; }
     .row{ display:flex; gap:8px; }
+    .hidden{ display:none; }
+    .error{ color:#ffb4b4; font-size:13px; text-align:center; min-height:18px; margin-top:6px;}
   </style>
-
   <script type="module">
+    /* ================= Firebase ================= */
     import { initializeApp } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-app.js";
-    import { getAuth, setPersistence, browserLocalPersistence,
-             signInWithEmailAndPassword, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-auth.js";
-    import { getFirestore, doc, getDoc } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-firestore.js";
+    import {
+      getAuth, onAuthStateChanged,
+      signInWithEmailAndPassword, signOut
+    } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-auth.js";
+    import {
+      getFirestore, doc, getDoc
+    } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-firestore.js";
 
-   const firebaseConfig = {
-  apiKey: "AIzaSyB-Mx5Qqwg6KFMJSA-yUb-DFo7UjfqCpKY",
-  authDomain: "aclinadev.firebaseapp.com",
-  projectId: "aclinadev",
-  storageBucket: "aclinadev.firebasestorage.app",
-  messagingSenderId: "401991392253",
-  appId: "1:401991392253:web:92400bc5d2503ed6879794",
-};
+    // Tu config (pegada tal cual)
+    const firebaseConfig = {
+      apiKey: "AIzaSyB-Mx5Qqwg6KFMJSA-yUb-DFo7UjfqCpKY",
+      authDomain: "aclinadev.firebaseapp.com",
+      projectId: "aclinadev",
+      storageBucket: "aclinadev.firebasestorage.app",
+      messagingSenderId: "401991392253",
+      appId: "1:401991392253:web:92400bc5d2503ed6879794",
+    };
 
-    const app  = initializeApp(firebaseConfig);
+    const app = initializeApp(firebaseConfig);
     const auth = getAuth(app);
     const db   = getFirestore(app);
-    await setPersistence(auth, browserLocalPersistence);
 
-    const adminEmails = ["tu-correo@ejemplo.com"]; // fallback rápido (además del doc users/{uid})
+    /* ================= UI refs ================= */
+    const loginBox   = document.getElementById('loginBox');
+    const modeBox    = document.getElementById('modeBox');
+    const errorBox   = document.getElementById('errorBox');
+    const form       = document.getElementById('loginForm');
+    const btnPanel   = document.getElementById('btnPanel');
+    const btnDisplay = document.getElementById('btnDisplay');
+    const btnLogout  = document.getElementById('btnLogout');
 
-    const loginBox  = document.getElementById("loginBox");
-    const modeBox   = document.getElementById("modeBox");
-    const who       = document.getElementById("who");
-    const btnPanel  = document.getElementById("btnPanel");
-    const btnDisplay= document.getElementById("btnDisplay");
-    const btnLogout = document.getElementById("btnLogout");
-    const form      = document.getElementById("loginForm");
-    const err       = document.getElementById("err");
-
-    form.addEventListener("submit", async (e)=>{
-      e.preventDefault();
-      err.textContent = "";
+    /* ================= Helpers ================= */
+    async function getRole(uid){
       try{
-        await signInWithEmailAndPassword(auth, form.email.value.trim(), form.pass.value);
-      }catch(e){
-        err.textContent = e.message || "Error de autenticación";
-      }
-    });
+        const snap = await getDoc(doc(db,'users',uid));
+        return snap.exists() ? (snap.data().role || 'user') : 'user';
+      }catch(e){ return 'user'; }
+    }
 
-    btnPanel.onclick   = ()=> location.href = "panel.html";
-    btnDisplay.onclick = ()=> location.href = "display.html";
-    btnLogout.onclick  = ()=> signOut(auth);
+    function showLogin(){
+      loginBox.classList.remove('hidden');
+      modeBox.classList.add('hidden');
+      errorBox.textContent = '';
+    }
+    function showModes(isAdmin){
+      loginBox.classList.add('hidden');
+      modeBox.classList.remove('hidden');
+      btnPanel.classList.toggle('hidden', !isAdmin);
+    }
 
+    /* ================= Auth flow ================= */
     onAuthStateChanged(auth, async (user)=>{
       if(user){
-        who.textContent = `Sesión: ${user.email}`;
-        who.classList.remove("hidden");
-        btnLogout.classList.remove("hidden");
-
-        let role = "user";
-        try {
-          const snap = await getDoc(doc(db,"users",user.uid));
-          if (snap.exists()) role = snap.data().role || "user";
-        } catch {}
-        if (adminEmails.includes(user.email)) role = "admin"; // fallback
-
-        btnPanel.classList.toggle("hidden", role !== "admin");
-        loginBox.classList.add("hidden");
-        modeBox.classList.remove("hidden");
+        const role = await getRole(user.uid);
+        showModes(role === 'admin');  // admin: ve ambos botones
       }else{
-        who.classList.add("hidden");
-        btnLogout.classList.add("hidden");
-        modeBox.classList.add("hidden");
-        loginBox.classList.remove("hidden");
+        showLogin();
       }
     });
+
+    form.addEventListener('submit', async (e)=>{
+      e.preventDefault();
+      errorBox.textContent = '';
+      const email = form.email.value.trim();
+      const pass  = form.pass.value;
+      try{
+        await signInWithEmailAndPassword(auth, email, pass);
+        // onAuthStateChanged hará el resto
+      }catch(err){
+        errorBox.textContent = mapError(err);
+      }
+    });
+
+    btnPanel.onclick   = ()=> location.href = 'panel.html';
+    btnDisplay.onclick = ()=> location.href = 'display.html';
+    btnLogout.onclick  = ()=> signOut(auth);
+
+    function mapError(err){
+      const c = err?.code || '';
+      if(c.includes('invalid-credential')) return 'Email o contraseña incorrectos.';
+      if(c.includes('too-many-requests'))  return 'Demasiados intentos. Esperá un momento.';
+      if(c.includes('network-request-failed')) return 'Sin conexión. Verificá internet.';
+      return err.message || 'Error al iniciar sesión.';
+    }
   </script>
 </head>
 <body>
   <div class="box">
-    <img class="logo" src="logo.png" alt="ACLiNa" onerror="this.style.display='none'">
+    <div class="brand">ACLiNa</div>
+    <div class="slogan">DESARROLLOS</div>
+
+    <!-- Login -->
     <div id="loginBox">
-      <h1>ACLiNa · Login</h1>
-      <form id="loginForm">
+      <h2>Iniciar sesión</h2>
+      <form id="loginForm" autocomplete="on">
         <input type="email" name="email" placeholder="Email" required />
-        <input type="password" name="pass"  placeholder="Contraseña" required />
-        <button class="btn btn-primary" type="submit">Ingresar</button>
+        <input type="password" name="pass" placeholder="Contraseña" required />
+        <button class="btn-primary" type="submit">Ingresar</button>
       </form>
-      <div id="err" class="muted" style="color:#ffb3b3;"></div>
+      <div id="errorBox" class="error"></div>
+      <div class="muted">Usá el usuario creado en Firebase Auth.</div>
     </div>
 
+    <!-- Selector de modo -->
     <div id="modeBox" class="hidden">
-      <h1>Bienvenido</h1>
-      <div class="row">
-        <button id="btnPanel"   class="btn btn-primary hidden">Panel de control</button>
-        <button id="btnDisplay" class="btn btn-primary">Pantalla</button>
+      <h2>Bienvenido</h2>
+      <div class="row" style="margin-bottom:8px; flex-direction:column; gap:8px;">
+        <button id="btnPanel" class="btn-primary hidden">Panel de Control</button>
+        <button id="btnDisplay" class="btn-primary">Pantalla</button>
       </div>
-      <div id="who" class="muted hidden"></div>
-      <div style="margin-top:8px; text-align:center;">
-        <button id="btnLogout" class="btn hidden" style="width:auto;padding:.6rem 1rem;">Cambiar de cuenta</button>
-      </div>
+      <button id="btnLogout">Cerrar sesión</button>
     </div>
   </div>
 </body>
 </html>
+
 
 
 
