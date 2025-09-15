@@ -590,10 +590,11 @@ const firebaseConfig = {
 
   /* ===== Init ===== */
   onAuthStateChanged(auth, async (user)=>{
-    if(!user){ location.href='index.html'; return; }
+    if(!user){ location.href='login.html'; return; }
     await loadFromCloud(); render();
   });
 
 </script>
 </body>
 </html>
+
