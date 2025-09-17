@@ -19,7 +19,13 @@ if (USE_FIREBASE && window.firebase) {
     console.log('Firestore listo');
   } catch (e){ console.warn('Error init Firebase, usando localStorage', e); }
 }
-
+if (USE_FIREBASE) {
+  if (!window.firebase) {
+    alert('⚠️ Firebase compat no cargó en cPanel.html. Agrega los <script> compat en el <head>.');
+  } else if (!db) {
+    alert('⚠️ Firebase cargó pero Firestore no inicializó. Revisa consola o reglas de seguridad.');
+  }
+}
 /********************
  * Estado + persistencia (localStorage)
  ********************/
@@ -552,4 +558,5 @@ function init(){
   if (db) { await ensureCloudAndSubscribe(); }
   init();
 })();
+
 
