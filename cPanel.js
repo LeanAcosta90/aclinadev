@@ -57,10 +57,11 @@ function log(action, payload){
 }
 
 /********************
- * Firestore sync (estado entero en un doc)
+ * Firestore sync (doc único) + tiempo real
  ********************/
 const CLOUD = { col: 'kanban', doc: 'state' };
 let cloudSaveTimer = null;
+let unsubSnapshot = null;
 
 function scheduleCloudSave(){
   if (!db) return;
@@ -68,26 +69,57 @@ function scheduleCloudSave(){
   cloudSaveTimer = setTimeout(async ()=>{
     try { await db.collection(CLOUD.col).doc(CLOUD.doc).set(state); }
     catch(err){ console.warn('cloudSave error', err); }
-  }, 400);
+  }, 300);
 }
 
-async function cloudLoad(){
+async function ensureCloudAndSubscribe(){
   if (!db) return;
-  try{
-    const snap = await db.collection(CLOUD.col).doc(CLOUD.doc).get();
-    if (snap.exists){
+
+  const ref = db.collection(CLOUD.col).doc(CLOUD.doc);
+
+  try {
+    const snap = await ref.get();
+    if (!snap.exists) {
+      // Si no existe en la nube, subimos lo local (para no perder tu trabajo actual)
+      await ref.set(state);
+      console.log('Cloud inicializado con estado local.');
+    } else {
+      // Existe: nube manda (cloud-wins), pisamos local con lo de la nube
       const cloud = snap.data() || {};
       state = {
-        ...state,
-        ...cloud,
-        tasks: cloud.tasks || state.tasks || [],
-        tipos: cloud.tipos || state.tipos || [],
-        techs: cloud.techs || state.techs || [],
-        products: cloud.products || state.products || [],
-        settings: cloud.settings || state.settings || {},
-        log: cloud.log || state.log || [],
+        ...state, // conserva claves desconocidas si las hubiera
+        tasks: Array.isArray(cloud.tasks) ? cloud.tasks : state.tasks,
+        tipos: Array.isArray(cloud.tipos) ? cloud.tipos : state.tipos,
+        techs: Array.isArray(cloud.techs) ? cloud.techs : state.techs,
+        products: Array.isArray(cloud.products) ? cloud.products : state.products,
+        settings: cloud.settings ?? state.settings,
+        log: Array.isArray(cloud.log) ? cloud.log : state.log,
       };
-      // persistimos local (modo offline)
+      // persistimos local para offline
+      saveLS(LS_KEYS.tasks, state.tasks);
+      saveLS(LS_KEYS.tipos, state.tipos);
+      saveLS(LS_KEYS.techs, state.techs);
+      saveLS(LS_KEYS.products, state.products);
+      saveLS(LS_KEYS.settings, state.settings);
+      saveLS(LS_KEYS.log, state.log);
+      console.log('Estado sincronizado desde la nube.');
+    }
+
+    // Suscripción en tiempo real
+    if (unsubSnapshot) unsubSnapshot();
+    unsubSnapshot = ref.onSnapshot(docSnap=>{
+      if (!docSnap.exists) return;
+      const cloud = docSnap.data() || {};
+      // nube manda
+      state = {
+        ...state,
+        tasks: Array.isArray(cloud.tasks) ? cloud.tasks : state.tasks,
+        tipos: Array.isArray(cloud.tipos) ? cloud.tipos : state.tipos,
+        techs: Array.isArray(cloud.techs) ? cloud.techs : state.techs,
+        products: Array.isArray(cloud.products) ? cloud.products : state.products,
+        settings: cloud.settings ?? state.settings,
+        log: Array.isArray(cloud.log) ? cloud.log : state.log,
+      };
       saveLS(LS_KEYS.tasks, state.tasks);
       saveLS(LS_KEYS.tipos, state.tipos);
       saveLS(LS_KEYS.techs, state.techs);
@@ -95,8 +127,11 @@ async function cloudLoad(){
       saveLS(LS_KEYS.settings, state.settings);
       saveLS(LS_KEYS.log, state.log);
       renderBoard();
-    }
-  }catch(err){ console.warn('cloudLoad error', err); }
+    });
+
+  } catch (err) {
+    console.warn('ensureCloudAndSubscribe error', err);
+  }
 }
 
 /********************
@@ -495,7 +530,7 @@ qs('#fab').onclick = ()=> openEditor(null);
 function init(){
   fillTipoFilters(); fillTipoSelect(); fillProductDatalist(); renderBoard();
 
-  // Solo seedea demo si NO usamos Firebase (modo 100% local)
+  // Demo SOLO si NO hay Firebase (modo 100% local)
   if(!state.tasks.length && !db){
     const demo=[
       {ot:'0001', producto:'Notebook', marca:'HP',      modelo:'15-dw', cliente:'María P.', turno:1, desc:'Pantalla no enciende', ingreso: now(), limite: new Date(Date.now()+toMs(96)).toISOString(), tipo:'Presupuesto', col:'diagnostico', compact:1, techIds:[0]},
@@ -512,12 +547,9 @@ function init(){
   }
 }
 
-// Arranque: primero nube (si hay), luego UI
+// Boot: si hay Firestore, asegura doc + escucha, luego init
 (async function boot(){
-  if (db) {
-    try { await cloudLoad(); } 
-    catch(e){ console.warn('cloudLoad fail', e); }
-  }
+  if (db) { await ensureCloudAndSubscribe(); }
   init();
 })();
 
