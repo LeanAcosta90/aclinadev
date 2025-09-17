@@ -21,6 +21,7 @@
       border-radius:12px;
       width:320px;
       text-align:center;
+      position:relative; /* para ubicar el link de cerrar sesión */
     }
     h1 { margin:0 0 16px; font-size:22px; }
     input,button {
@@ -39,10 +40,25 @@
     }
     .hidden { display:none; }
     img.logo { width:80px; margin-bottom:12px; }
+
+    /* "cerrar sesión" como texto clickeable, no botón */
+    .signout {
+      position:absolute;
+      top:10px;
+      right:12px;
+      font-size:13px;
+      color:#9aa4b2;
+      cursor:pointer;
+      user-select:none;
+    }
+    .signout:hover { color:#ffffff; text-decoration:underline; }
   </style>
 </head>
 <body>
   <div class="box">
+    <!-- Frase de cerrar sesión (se muestra solo si hay usuario) -->
+    <span id="signOut" class="signout hidden" title="Cerrar sesión">cerrar sesión</span>
+
     <div id="loginBox">
       <img src="logo.png" alt="ACLiNa" class="logo">
       <h1>KNBN MICROCOR</h1>
@@ -62,7 +78,7 @@
 
   <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-app.js";
-    import { getAuth, signInWithEmailAndPassword, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-auth.js";
+    import { getAuth, signInWithEmailAndPassword, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-auth.js";
     import { getFirestore, doc, getDoc } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-firestore.js";
 
     // Configuración Firebase
@@ -85,6 +101,7 @@
     const form = document.getElementById("loginForm");
     const btnPanel = document.getElementById("btnPanel");
     const btnDisplay = document.getElementById("btnDisplay");
+    const signOutEl = document.getElementById("signOut");
 
     form.addEventListener("submit", async (e)=>{
       e.preventDefault();
@@ -109,6 +126,7 @@
 
         document.getElementById("loginBox").classList.add("hidden");
         document.getElementById("modeBox").classList.remove("hidden");
+        signOutEl.classList.remove("hidden"); // mostrar "cerrar sesión"
 
         if(role==="admin"){
           btnPanel.classList.remove("hidden");
@@ -118,7 +136,14 @@
       }else{
         document.getElementById("loginBox").classList.remove("hidden");
         document.getElementById("modeBox").classList.add("hidden");
+        signOutEl.classList.add("hidden"); // ocultar si no hay user
       }
+    });
+
+    // Cerrar sesión al tocar la frase
+    signOutEl.addEventListener("click", async ()=>{
+      try { await signOut(auth); }
+      catch(err){ alert("No se pudo cerrar sesión: " + err.message); }
     });
 
     btnPanel.onclick = ()=> location.href="cPanel.html";
@@ -126,11 +151,6 @@
   </script>
 </body>
 </html>
-
-
-
-
-
 
 
 
