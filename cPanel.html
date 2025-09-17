@@ -3,37 +3,47 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Pizarra Kanban</title>
+  <title>cPanel • AC KANBAN</title>
+
+  <!-- Estilos -->
   <link rel="stylesheet" href="cPanel.css" />
+
+  <!-- Firebase SDKs (Compat) -->
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
 </head>
 <body>
   <div class="app">
     <header>
-      <h1>Pizarra Kanban — Diagnóstico / Reparación / Listo</h1>
+      <h1>AC Kanban</h1>
       <div class="spacer"></div>
       <div class="toolbar">
-        <select id="filterTipo"><option value="">Tipo: Todos</option></select>
-        <select id="filterTurno">
-          <option value="">Turno: 1 y 2</option>
-          <option value="1">Turno 1</option>
-          <option value="2">Turno 2</option>
-        </select>
-        <button id="btnExport" class="ghost">Exportar CSV</button>
-        <button id="btnSettings" class="ghost" title="Ajustes">⚙️ Ajustes</button>
+        <div class="filters">
+          <select id="filterTipo">
+            <option value="">Tipo: Todos</option>
+          </select>
+          <select id="filterTurno">
+            <option value="">Turno: 1 y 2</option>
+            <option value="1">Turno 1</option>
+            <option value="2">Turno 2</option>
+          </select>
+          <button id="btnExport" class="ghost">Exportar CSV</button>
+          <button id="btnSettings" title="Ajustes" class="ghost">⚙️ Ajustes</button>
+        </div>
       </div>
     </header>
 
     <main class="board" id="board">
       <section class="column" data-col="diagnostico">
-        <h2>DIAGNÓSTICO</h2>
+        <h2>Diagnóstico</h2>
         <div class="grid" id="col-diagnostico"></div>
       </section>
       <section class="column" data-col="reparacion">
-        <h2>REPARACIÓN</h2>
+        <h2>Reparación</h2>
         <div class="grid" id="col-reparacion"></div>
       </section>
       <section class="column" data-col="listo">
-        <h2>LISTO</h2>
+        <h2>Listo</h2>
         <div class="grid" id="col-listo"></div>
       </section>
     </main>
@@ -41,30 +51,67 @@
     <button class="fab" id="fab">+</button>
     <div class="archive-bar" id="archiveBar">🗄️ Arrastra aquí para archivar</div>
 
-    <!-- Editor de tarjeta -->
+    <!-- Drawer de edición / creación -->
     <aside class="drawer" id="drawer">
-      <header><h1>Editar tarjeta</h1></header>
+      <header><h1 style="font-size:15px; margin:0;">Editar tarjeta</h1></header>
       <div class="content">
         <div class="row">
-          <div><label>N° OT</label><input id="f-ot" /></div>
-          <div><label>Producto</label><input id="f-producto" list="datalistProductos" /><datalist id="datalistProductos"></datalist></div>
+          <div>
+            <label>Número de OT</label>
+            <input id="f-ot" placeholder="0001" />
+          </div>
+          <div>
+            <label>Producto</label>
+            <input id="f-producto" list="datalistProductos" placeholder="Notebook" />
+            <datalist id="datalistProductos"></datalist>
+          </div>
         </div>
         <div class="row">
-          <div><label>Marca</label><input id="f-marca" /></div>
-          <div><label>Modelo</label><input id="f-modelo" /></div>
+          <div>
+            <label>Marca</label>
+            <input id="f-marca" placeholder="Marca" />
+          </div>
+          <div>
+            <label>Modelo</label>
+            <input id="f-modelo" placeholder="Modelo" />
+          </div>
         </div>
         <div class="row">
-          <div><label>Cliente</label><input id="f-cliente" /></div>
-          <div><label>Turno</label><select id="f-turno"><option value="1">1</option><option value="2">2</option></select></div>
+          <div>
+            <label>Cliente</label>
+            <input id="f-cliente" placeholder="Nombre y apellido" />
+          </div>
+          <div>
+            <label>Turno</label>
+            <select id="f-turno">
+              <option value="1">1</option>
+              <option value="2">2</option>
+            </select>
+          </div>
         </div>
-        <div><label>Descripción</label><textarea id="f-desc" rows="3"></textarea></div>
-        <div class="row">
-          <div><label>Fecha de ingreso</label><input id="f-ingreso" type="datetime-local" /></div>
-          <div><label>Fecha límite</label><input id="f-limite" type="datetime-local" /></div>
+        <div>
+          <label>Descripción</label>
+          <textarea id="f-desc" rows="3" placeholder="Falla, notas, etc."></textarea>
         </div>
         <div class="row">
-          <div><label>Tipo de tarea</label><select id="f-tipo"></select></div>
-          <div><label>Color (opcional)</label><input id="f-color" type="color" /></div>
+          <div>
+            <label>Fecha de ingreso</label>
+            <input id="f-ingreso" type="datetime-local" />
+          </div>
+          <div>
+            <label>Fecha límite (entrega)</label>
+            <input id="f-limite" type="datetime-local" />
+          </div>
+        </div>
+        <div class="row">
+          <div>
+            <label>Tipo de tarea</label>
+            <select id="f-tipo"></select>
+          </div>
+          <div>
+            <label>Color (auto por tipo, opcional override)</label>
+            <input id="f-color" type="color" />
+          </div>
         </div>
         <div>
           <label>Técnicos (borde por color)</label>
@@ -72,15 +119,20 @@
           <button id="btnAddTech" class="ghost" type="button">+ Agregar técnico</button>
         </div>
         <div class="row">
-          <div><label>Columna</label>
+          <div>
+            <label>Columna</label>
             <select id="f-col">
               <option value="diagnostico">Diagnóstico</option>
               <option value="reparacion">Reparación</option>
               <option value="listo">Listo</option>
             </select>
           </div>
-          <div><label>Vista móvil</label>
-            <select id="f-compact"><option value="1">Compacta</option><option value="0">Completa</option></select>
+          <div>
+            <label>Vista compacta móvil</label>
+            <select id="f-compact">
+              <option value="1">Compacta</option>
+              <option value="0">Expandida</option>
+            </select>
           </div>
         </div>
       </div>
@@ -92,39 +144,40 @@
       </footer>
     </aside>
 
-    <!-- Ajustes -->
+    <!-- Drawer Ajustes -->
     <aside class="drawer" id="settings">
-      <header><h1>Ajustes</h1></header>
+      <header><h1 style="font-size:15px; margin:0;">Ajustes</h1></header>
       <div class="content">
-        <h3>Tipos de tarea (color por defecto)</h3>
+        <h3 style="margin:.2rem 0;">Colores por tipo de tarea</h3>
         <div id="tipoColors"></div>
         <button id="btnAddTipo" class="ghost">+ Agregar tipo</button>
-
-        <hr/>
-
-        <h3>Tiempos</h3>
+        <hr style="border-color:#24314a;"/>
+        <h3 style="margin:.2rem 0;">Tiempos</h3>
         <div class="row">
-          <div><label>Máx. horas presupuestar</label><input id="st-budgetMaxH" type="number" min="1" step="1" /></div>
-          <div><label>Min. horas entrega</label><input id="st-deliveryMinH" type="number" min="0" step="1" /></div>
-          <div><label>Máx. horas entrega</label><input id="st-deliveryMaxH" type="number" min="1" step="1" /></div>
+          <div><label>Máx. horas para presupuestar</label><input id="st-budgetMaxH" type="number" min="1" step="1" /></div>
+          <div><label>Min. horas para entrega (post-presupuesto)</label><input id="st-deliveryMinH" type="number" min="0" step="1" /></div>
+          <div><label>Máx. horas para entrega (post-presupuesto)</label><input id="st-deliveryMaxH" type="number" min="1" step="1" /></div>
         </div>
         <div class="row">
-          <div><label>Glow presupuesto (h antes)</label><input id="st-glowBudgetH" type="number" min="1" step="1" /></div>
-          <div><label>Glow entrega (h antes)</label><input id="st-glowDeliveryH" type="number" min="1" step="1" /></div>
+          <div><label>Umbral glow presupuesto (h antes)</label><input id="st-glowBudgetH" type="number" min="1" step="1" /></div>
+          <div><label>Umbral glow entrega (h antes)</label><input id="st-glowDeliveryH" type="number" min="1" step="1" /></div>
         </div>
-
-        <hr/>
-        <h3>Técnicos (paleta)</h3>
+        <hr style="border-color:#24314a;"/>
+        <h3 style="margin:.2rem 0;">Técnicos (paleta)</h3>
         <div id="settingsTech"></div>
         <button id="btnAddSettingsTech" class="ghost">+ Agregar técnico</button>
       </div>
-      <footer><div class="spacer"></div><button id="btnCloseSettings" class="ghost">Cerrar</button></footer>
+      <footer>
+        <div class="spacer"></div>
+        <button id="btnCloseSettings" class="ghost">Cerrar</button>
+      </footer>
     </aside>
 
     <!-- Visor móvil -->
     <div class="mobile-viewer" id="mv"><div class="mobile-sheet" id="mvSheet"></div></div>
   </div>
 
+  <!-- Lógica -->
   <script defer src="cPanel.js"></script>
 </body>
 </html>

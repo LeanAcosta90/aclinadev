@@ -1,4 +1,26 @@
 /********************
+ * Firebase + Firestore (Compat)
+ ********************/
+const USE_FIREBASE = true; // poné false si querés 100% local
+const firebaseConfig = {
+  apiKey: "AIzaSyB-Mx5Qqwg6KFMJSA-yUb-DFo7UjfqCpKY",
+  authDomain: "aclinadev.firebaseapp.com",
+  projectId: "aclinadev",
+  storageBucket: "aclinadev.firebasestorage.app",
+  messagingSenderId: "401991392253",
+  appId: "1:401991392253:web:92400bc5d2503ed6879794",
+};
+
+let db = null;
+if (USE_FIREBASE && window.firebase) {
+  try {
+    firebase.initializeApp(firebaseConfig);
+    db = firebase.firestore();
+    console.log('Firestore listo');
+  } catch (e){ console.warn('Error init Firebase, usando localStorage', e); }
+}
+
+/********************
  * Estado + persistencia (localStorage)
  ********************/
 const LS_KEYS = {
@@ -11,7 +33,7 @@ const defaultTipos = [
   { name:'No Aceptado', color:'#ff6b6b' },
   { name:'Garantia F', color:'#f6ad55' },
   { name:'Garantia T', color:'#56ccf2' },
-  { name:'Tarea Común', color:'#b48ef5' },
+  { name:'Tarea Común', color:'#b48ef5' }
 ];
 const defaultSettings = { budgetMaxH:48, deliveryMinH:24, deliveryMaxH:120, glowBudgetH:24, glowDeliveryH:48 };
 
@@ -28,7 +50,54 @@ let state = {
   log: loadLS(LS_KEYS.log, []),
 };
 
-function log(action,payload){ state.log.push({ts:now(), action, payload}); saveLS(LS_KEYS.log, state.log); }
+function log(action, payload){
+  state.log.push({ ts: now(), action, payload });
+  saveLS(LS_KEYS.log, state.log);
+  scheduleCloudSave();
+}
+
+/********************
+ * Firestore sync (estado entero en un doc)
+ ********************/
+const CLOUD = { col: 'kanban', doc: 'state' };
+let cloudSaveTimer = null;
+
+function scheduleCloudSave(){
+  if (!db) return;
+  clearTimeout(cloudSaveTimer);
+  cloudSaveTimer = setTimeout(async ()=>{
+    try { await db.collection(CLOUD.col).doc(CLOUD.doc).set(state); }
+    catch(err){ console.warn('cloudSave error', err); }
+  }, 400);
+}
+
+async function cloudLoad(){
+  if (!db) return;
+  try{
+    const snap = await db.collection(CLOUD.col).doc(CLOUD.doc).get();
+    if (snap.exists){
+      const cloud = snap.data() || {};
+      state = {
+        ...state,
+        ...cloud,
+        tasks: cloud.tasks || state.tasks || [],
+        tipos: cloud.tipos || state.tipos || [],
+        techs: cloud.techs || state.techs || [],
+        products: cloud.products || state.products || [],
+        settings: cloud.settings || state.settings || {},
+        log: cloud.log || state.log || [],
+      };
+      // persistimos local
+      saveLS(LS_KEYS.tasks, state.tasks);
+      saveLS(LS_KEYS.tipos, state.tipos);
+      saveLS(LS_KEYS.techs, state.techs);
+      saveLS(LS_KEYS.products, state.products);
+      saveLS(LS_KEYS.settings, state.settings);
+      saveLS(LS_KEYS.log, state.log);
+      renderBoard();
+    }
+  }catch(err){ console.warn('cloudLoad error', err); }
+}
 
 /********************
  * Utilidades
@@ -173,8 +242,10 @@ function hookDnD(){
       const to = state.tasks.findIndex(t=>t.id===target.id);
       state.tasks.splice(before ? to : to+1, 0, dragged);
 
-      // al cambiar de columna
+      // sincronizar columna si cambió
+      const oldCol = dragged.col;
       dragged.col = target.col;
+      if (oldCol !== dragged.col) log('move',{id:dragged.id, col:dragged.col});
       dragged.updatedAt = now();
 
       log('reorder',{id:dragged.id, ref:target.id, pos:before?'before':'after', col:target.col});
@@ -231,7 +302,7 @@ function addTechChip(idx){
   wrap.appendChild(row);
   const sel=row.querySelector('.techSel'); const col=row.querySelector('.techColor');
   sel.addEventListener('change', ()=>{ col.value = state.techs[+sel.value]?.color||'#cccccc'; });
-  col.addEventListener('input', ()=>{ const t=state.techs[+sel.value]; if(t){ t.color=col.value; saveLS(LS_KEYS.techs,state.techs); } });
+  col.addEventListener('input', ()=>{ const t=state.techs[+sel.value]; if(t){ t.color=col.value; saveLS(LS_KEYS.techs,state.techs); scheduleCloudSave(); } });
   row.querySelector('.delTech').onclick = ()=> row.remove();
 }
 
@@ -286,7 +357,9 @@ qs('#btnSave').onclick = ()=>{
     updatedAt: now(),
   };
 
-  if(n.producto && !state.products.includes(n.producto)){ state.products.push(n.producto); saveLS(LS_KEYS.products,state.products); fillProductDatalist(); }
+  if(n.producto && !state.products.includes(n.producto)){
+    state.products.push(n.producto); saveLS(LS_KEYS.products,state.products); fillProductDatalist(); scheduleCloudSave();
+  }
 
   const ing = n.ingreso ? new Date(n.ingreso).getTime() : Date.now();
   n.budgetDue = new Date(ing + toMs(state.settings.budgetMaxH)).toISOString();
@@ -299,7 +372,7 @@ qs('#btnSave').onclick = ()=>{
   persistTasks(); renderBoard(); qs('#drawer').classList.remove('open');
 };
 
-function persistTasks(){ saveLS(LS_KEYS.tasks, state.tasks); }
+function persistTasks(){ saveLS(LS_KEYS.tasks, state.tasks); scheduleCloudSave(); }
 
 /********************
  * Ajustes
@@ -333,25 +406,32 @@ function renderSettings(){
   });
 }
 function openSettings(){ qs('#settings').classList.add('open'); renderSettings(); }
-function closeSettings(){ qs('#settings').classList.remove('open'); saveLS(LS_KEYS.tipos,state.tipos); saveLS(LS_KEYS.settings,state.settings); saveLS(LS_KEYS.techs,state.techs); fillTipoFilters(); fillTipoSelect(); renderBoard(); }
+function closeSettings(){
+  qs('#settings').classList.remove('open');
+  saveLS(LS_KEYS.tipos,state.tipos);
+  saveLS(LS_KEYS.settings,state.settings);
+  saveLS(LS_KEYS.techs,state.techs);
+  fillTipoFilters(); fillTipoSelect(); renderBoard();
+  scheduleCloudSave();
+}
 
 qs('#btnSettings').onclick=openSettings;
 qs('#btnCloseSettings').onclick=closeSettings;
-qs('#btnAddTipo').onclick=()=>{ state.tipos.push({name:'Nuevo Tipo', color:'#8888ff'}); saveLS(LS_KEYS.tipos,state.tipos); renderSettings(); fillTipoFilters(); fillTipoSelect(); renderBoard(); };
+qs('#btnAddTipo').onclick=()=>{ state.tipos.push({name:'Nuevo Tipo', color:'#8888ff'}); saveLS(LS_KEYS.tipos,state.tipos); renderSettings(); fillTipoFilters(); fillTipoSelect(); renderBoard(); scheduleCloudSave(); };
 qs('#tipoColors').addEventListener('input',(e)=>{
-  if(e.target.classList.contains('tipoName')){ const i=+e.target.dataset.idx; state.tipos[i].name=e.target.value; saveLS(LS_KEYS.tipos,state.tipos); fillTipoFilters(); fillTipoSelect(); renderBoard(); }
-  if(e.target.classList.contains('tipoColor')){ const i=+e.target.dataset.idx; state.tipos[i].color=e.target.value; saveLS(LS_KEYS.tipos,state.tipos); renderBoard(); }
+  if(e.target.classList.contains('tipoName')){ const i=+e.target.dataset.idx; state.tipos[i].name=e.target.value; saveLS(LS_KEYS.tipos,state.tipos); fillTipoFilters(); fillTipoSelect(); renderBoard(); scheduleCloudSave(); }
+  if(e.target.classList.contains('tipoColor')){ const i=+e.target.dataset.idx; state.tipos[i].color=e.target.value; saveLS(LS_KEYS.tipos,state.tipos); renderBoard(); scheduleCloudSave(); }
 });
 qs('#tipoColors').addEventListener('click',(e)=>{
-  if(e.target.classList.contains('delTipo')){ const i=+e.target.dataset.idx; state.tipos.splice(i,1); saveLS(LS_KEYS.tipos,state.tipos); renderSettings(); fillTipoFilters(); fillTipoSelect(); renderBoard(); }
+  if(e.target.classList.contains('delTipo')){ const i=+e.target.dataset.idx; state.tipos.splice(i,1); saveLS(LS_KEYS.tipos,state.tipos); renderSettings(); fillTipoFilters(); fillTipoSelect(); renderBoard(); scheduleCloudSave(); }
 });
-qs('#btnAddSettingsTech').onclick=()=>{ state.techs.push({name:'Nuevo técnico', color:'#cccc55'}); saveLS(LS_KEYS.techs,state.techs); renderSettings(); };
+qs('#btnAddSettingsTech').onclick=()=>{ state.techs.push({name:'Nuevo técnico', color:'#cccc55'}); saveLS(LS_KEYS.techs,state.techs); renderSettings(); scheduleCloudSave(); };
 qs('#settingsTech').addEventListener('input',(e)=>{
-  if(e.target.classList.contains('st-techName')){ const i=+e.target.dataset.idx; state.techs[i].name=e.target.value; saveLS(LS_KEYS.techs,state.techs); }
-  if(e.target.classList.contains('st-techColor')){ const i=+e.target.dataset.idx; state.techs[i].color=e.target.value; saveLS(LS_KEYS.techs,state.techs); renderBoard(); }
+  if(e.target.classList.contains('st-techName')){ const i=+e.target.dataset.idx; state.techs[i].name=e.target.value; saveLS(LS_KEYS.techs,state.techs); scheduleCloudSave(); }
+  if(e.target.classList.contains('st-techColor')){ const i=+e.target.dataset.idx; state.techs[i].color=e.target.value; saveLS(LS_KEYS.techs,state.techs); renderBoard(); scheduleCloudSave(); }
 });
 qs('#settingsTech').addEventListener('click',(e)=>{
-  if(e.target.classList.contains('delSettingsTech')){ const i=+e.target.dataset.idx; state.techs.splice(i,1); saveLS(LS_KEYS.techs,state.techs); renderSettings(); renderBoard(); }
+  if(e.target.classList.contains('delSettingsTech')){ const i=+e.target.dataset.idx; state.techs.splice(i,1); saveLS(LS_KEYS.techs,state.techs); renderSettings(); renderBoard(); scheduleCloudSave(); }
 });
 
 /********************
@@ -414,7 +494,7 @@ function openMobileView(card){
 function closeMobileView(){ qs('#mv').classList.remove('open'); }
 
 /********************
- * Init
+ * FAB + Init
  ********************/
 qs('#fab').onclick = ()=> openEditor(null);
 
@@ -424,11 +504,13 @@ function init(){
   // demo si está vacío
   if(!state.tasks.length){
     const demo=[
-      {ot:'23659', producto:'Impresora', marca:'HP', modelo:'DeskJet', cliente:'Florinda Meza', turno:1, desc:'No imprime', ingreso: now(), limite: new Date(Date.now()+toMs(96)).toISOString(), tipo:'Aceptado', col:'reparacion', compact:1, techIds:[0]},
-      {ot:'23623', producto:'Microondas', marca:'BGH', modelo:'X', cliente:'Miguel Castaña', turno:1, desc:'Pintura saltada', ingreso: now(), limite: new Date(Date.now()+toMs(72)).toISOString(), tipo:'Presupuesto', col:'reparacion', compact:1, techIds:[1]},
+      {ot:'0001', producto:'Notebook', marca:'HP', modelo:'15-dw', cliente:'María P.', turno:1, desc:'Pantalla no enciende', ingreso: now(), limite: new Date(Date.now()+toMs(96)).toISOString(), tipo:'Presupuesto', col:'diagnostico', compact:1, techIds:[0]},
+      {ot:'0002', producto:'Celular', marca:'Samsung', modelo:'A52', cliente:'J. López', turno:2, desc:'Cambio de batería', ingreso: now(), limite: new Date(Date.now()+toMs(72)).toISOString(), tipo:'Aceptado', col:'reparacion', compact:1, techIds:[1]},
     ];
     demo.forEach(d=>{ d.id='t_'+Math.random().toString(36).slice(2,9); d.color=null; d.budgetDue=new Date(Date.now()+toMs(state.settings.budgetMaxH)).toISOString(); d.deliveryDue=new Date(Date.now()+toMs(state.settings.deliveryMaxH)).toISOString(); d.updatedAt=now(); });
     state.tasks = demo; persistTasks(); log('seed',{count:demo.length});
   }
+
+  if (db) cloudLoad(); // carga desde Firestore si está habilitado
 }
 init();
