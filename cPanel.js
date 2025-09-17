@@ -26,6 +26,7 @@ if (USE_FIREBASE) {
     alert('⚠️ Firebase cargó pero Firestore no inicializó. Revisa consola o reglas de seguridad.');
   }
 }
+
 /********************
  * Estado + persistencia (localStorage)
  ********************/
@@ -75,9 +76,38 @@ function scheduleCloudSave(){
   cloudSaveTimer = setTimeout(async ()=>{
     try { await db.collection(CLOUD.col).doc(CLOUD.doc).set(state); }
     catch(err){ console.warn('cloudSave error', err); }
-  }, 300);
+  }, 400);
 }
 
+async function cloudLoad(){ // (queda por compatibilidad pero no se llama en el boot)
+  if (!db) return;
+  try{
+    const snap = await db.collection(CLOUD.col).doc(CLOUD.doc).get();
+    if (snap.exists){
+      const cloud = snap.data() || {};
+      state = {
+        ...state,
+        ...cloud,
+        tasks: cloud.tasks || state.tasks || [],
+        tipos: cloud.tipos || state.tipos || [],
+        techs: cloud.techs || state.techs || [],
+        products: cloud.products || state.products || [],
+        settings: cloud.settings || state.settings || {},
+        log: cloud.log || state.log || [],
+      };
+      // persistimos local
+      saveLS(LS_KEYS.tasks, state.tasks);
+      saveLS(LS_KEYS.tipos, state.tipos);
+      saveLS(LS_KEYS.techs, state.techs);
+      saveLS(LS_KEYS.products, state.products);
+      saveLS(LS_KEYS.settings, state.settings);
+      saveLS(LS_KEYS.log, state.log);
+      renderBoard();
+    }
+  }catch(err){ console.warn('cloudLoad error', err); }
+}
+
+// NUEVO: asegura doc en nube (si no existe, sube tu local) y suscribe onSnapshot
 async function ensureCloudAndSubscribe(){
   if (!db) return;
 
@@ -86,14 +116,12 @@ async function ensureCloudAndSubscribe(){
   try {
     const snap = await ref.get();
     if (!snap.exists) {
-      // Si no existe en la nube, subimos lo local (para no perder tu trabajo actual)
-      await ref.set(state);
+      await ref.set(state); // primer push con tu estado local
       console.log('Cloud inicializado con estado local.');
     } else {
-      // Existe: nube manda (cloud-wins), pisamos local con lo de la nube
       const cloud = snap.data() || {};
       state = {
-        ...state, // conserva claves desconocidas si las hubiera
+        ...state,
         tasks: Array.isArray(cloud.tasks) ? cloud.tasks : state.tasks,
         tipos: Array.isArray(cloud.tipos) ? cloud.tipos : state.tipos,
         techs: Array.isArray(cloud.techs) ? cloud.techs : state.techs,
@@ -101,7 +129,6 @@ async function ensureCloudAndSubscribe(){
         settings: cloud.settings ?? state.settings,
         log: Array.isArray(cloud.log) ? cloud.log : state.log,
       };
-      // persistimos local para offline
       saveLS(LS_KEYS.tasks, state.tasks);
       saveLS(LS_KEYS.tipos, state.tipos);
       saveLS(LS_KEYS.techs, state.techs);
@@ -111,12 +138,10 @@ async function ensureCloudAndSubscribe(){
       console.log('Estado sincronizado desde la nube.');
     }
 
-    // Suscripción en tiempo real
     if (unsubSnapshot) unsubSnapshot();
     unsubSnapshot = ref.onSnapshot(docSnap=>{
       if (!docSnap.exists) return;
       const cloud = docSnap.data() || {};
-      // nube manda
       state = {
         ...state,
         tasks: Array.isArray(cloud.tasks) ? cloud.tasks : state.tasks,
@@ -201,6 +226,7 @@ function renderBoard(){
     el.className='card draggable'; el.draggable=true; el.dataset.id=card.id;
     if(!!Number(card.compact)) el.classList.add('compact');
 
+    // anillos técnico
     if((card.techIds||[]).length) el.dataset.techRings='1';
     Object.entries(techRingsStyles(card.techIds)).forEach(([k,v])=> el.style.setProperty(k,v));
     ['ring0','ring1','ring2','ring3'].forEach((cls,idx)=>{ if(el.style.getPropertyValue(`--ring${idx}`)) el.classList.add(cls); });
@@ -233,6 +259,7 @@ function renderBoard(){
 let dragId = null;
 
 function hookDnD(){
+  // listeners por tarjeta (se regeneran en cada render)
   qsa('.draggable').forEach(el=>{
     el.addEventListener('dragstart', (e)=>{
       dragId = el.dataset.id;
@@ -248,6 +275,7 @@ function hookDnD(){
       el.classList.remove('dragging','drag-hover','drag-target-before','drag-target-after');
     });
 
+    // marcador antes/después según mitad vertical
     el.addEventListener('dragover', (e)=>{
       if(!dragId || el.dataset.id===dragId) return;
       e.preventDefault();
@@ -274,11 +302,13 @@ function hookDnD(){
       const rect = el.getBoundingClientRect();
       const before = e.clientY < (rect.top + rect.height/2);
 
+      // mover en array
       const from = state.tasks.findIndex(t=>t.id===dragged.id);
       state.tasks.splice(from,1);
       const to = state.tasks.findIndex(t=>t.id===target.id);
       state.tasks.splice(before ? to : to+1, 0, dragged);
 
+      // sincronizar columna si cambió
       const oldCol = dragged.col;
       dragged.col = target.col;
       if (oldCol !== dragged.col) log('move',{id:dragged.id, col:dragged.col});
@@ -290,6 +320,7 @@ function hookDnD(){
   });
 }
 
+// drop en vacío de columna = enviar al final de esa columna
 (function bindStaticDnD(){
   qsa('.column').forEach(col=>{
     col.addEventListener('dragover',(e)=>{ e.preventDefault(); });
@@ -529,28 +560,24 @@ function openMobileView(card){
 function closeMobileView(){ qs('#mv').classList.remove('open'); }
 
 /********************
- * FAB + Init (arranque ordenado)
+ * FAB + Init
  ********************/
 qs('#fab').onclick = ()=> openEditor(null);
 
 function init(){
   fillTipoFilters(); fillTipoSelect(); fillProductDatalist(); renderBoard();
 
-  // Demo SOLO si NO hay Firebase (modo 100% local)
+  // Solo DEMO si NO hay Firebase (modo 100% local)
   if(!state.tasks.length && !db){
     const demo=[
-      {ot:'0001', producto:'Notebook', marca:'HP',      modelo:'15-dw', cliente:'María P.', turno:1, desc:'Pantalla no enciende', ingreso: now(), limite: new Date(Date.now()+toMs(96)).toISOString(), tipo:'Presupuesto', col:'diagnostico', compact:1, techIds:[0]},
-      {ot:'0002', producto:'Celular',  marca:'Samsung', modelo:'A52',   cliente:'J. López', turno:2, desc:'Cambio de batería',    ingreso: now(), limite: new Date(Date.now()+toMs(72)).toISOString(), tipo:'Aceptado',    col:'reparacion', compact:1, techIds:[1]},
+      {ot:'0001', producto:'Notebook', marca:'HP', modelo:'15-dw', cliente:'María P.', turno:1, desc:'Pantalla no enciende', ingreso: now(), limite: new Date(Date.now()+toMs(96)).toISOString(), tipo:'Presupuesto', col:'diagnostico', compact:1, techIds:[0]},
+      {ot:'0002', producto:'Celular',  marca:'Samsung', modelo:'A52', cliente:'J. López', turno:2, desc:'Cambio de batería', ingreso: now(), limite: new Date(Date.now()+toMs(72)).toISOString(), tipo:'Aceptado',   col:'reparacion', compact:1, techIds:[1]},
     ];
-    demo.forEach(d=>{
-      d.id='t_'+Math.random().toString(36).slice(2,9);
-      d.color=null;
-      d.budgetDue=new Date(Date.now()+toMs(state.settings.budgetMaxH)).toISOString();
-      d.deliveryDue=new Date(Date.now()+toMs(state.settings.deliveryMaxH)).toISOString();
-      d.updatedAt=now();
-    });
+    demo.forEach(d=>{ d.id='t_'+Math.random().toString(36).slice(2,9); d.color=null; d.budgetDue=new Date(Date.now()+toMs(state.settings.budgetMaxH)).toISOString(); d.deliveryDue=new Date(Date.now()+toMs(state.settings.deliveryMaxH)).toISOString(); d.updatedAt=now(); });
     state.tasks = demo; persistTasks(); log('seed',{count:demo.length});
   }
+
+  // (OJO) Ya no llamamos cloudLoad() acá. El boot maneja la nube primero.
 }
 
 // Boot: si hay Firestore, asegura doc + escucha, luego init
@@ -558,5 +585,7 @@ function init(){
   if (db) { await ensureCloudAndSubscribe(); }
   init();
 })();
+
+
 
 
