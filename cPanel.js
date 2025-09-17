@@ -1,6 +1,11 @@
 /********************
- * Firebase + Firestore (Compat)
+ * Firebase (MÓDULOS) + Firestore
  ********************/
+import { initializeApp } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-app.js";
+import { getFirestore, doc, getDoc, setDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-firestore.js";
+// (Opcional) si luego querés forzar login en este panel:
+// import { getAuth, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-auth.js";
+
 const USE_FIREBASE = true; // poné false si querés 100% local
 const firebaseConfig = {
   apiKey: "AIzaSyB-Mx5Qqwg6KFMJSA-yUb-DFo7UjfqCpKY",
@@ -11,21 +16,38 @@ const firebaseConfig = {
   appId: "1:401991392253:web:92400bc5d2503ed6879794",
 };
 
-let db = null;
-if (USE_FIREBASE && window.firebase) {
-  try {
-    firebase.initializeApp(firebaseConfig);
-    db = firebase.firestore();
-    console.log('Firestore listo');
-  } catch (e){ console.warn('Error init Firebase, usando localStorage', e); }
-}
+let app = null, db = null;
 if (USE_FIREBASE) {
-  if (!window.firebase) {
-    alert('⚠️ Firebase compat no cargó en cPanel.html. Agrega los <script> compat en el <head>.');
-  } else if (!db) {
-    alert('⚠️ Firebase cargó pero Firestore no inicializó. Revisa consola o reglas de seguridad.');
+  try {
+    app = initializeApp(firebaseConfig);
+    db = getFirestore(app);
+    console.log("Firestore listo (módulos)");
+  } catch (e) {
+    console.warn("Error init Firebase, usando localStorage", e);
   }
 }
+
+// (opcional) botón de logout si tu HTML lo tiene:
+// const auth = app ? getAuth(app) : null;
+// const btnLogout = document.querySelector('#btnLogout');
+// if (btnLogout && auth) btnLogout.onclick = () => signOut(auth);
+
+/********************
+ * (Opcional) RESET de cache local (agregá ?reset=1 a la URL una vez)
+ ********************/
+try {
+  const q = new URLSearchParams(location.search);
+  if (q.get('reset') === '1') {
+    localStorage.removeItem('kanban.tasks.v1');
+    localStorage.removeItem('kanban.tipos.v1');
+    localStorage.removeItem('kanban.techs.v1');
+    localStorage.removeItem('kanban.products.v1');
+    localStorage.removeItem('kanban.settings.v1');
+    localStorage.removeItem('kanban.log.v1');
+    console.log('LocalStorage limpio. Recargando…');
+    setTimeout(()=>location.replace(location.pathname), 200);
+  }
+} catch {}
 
 /********************
  * Estado + persistencia (localStorage)
@@ -69,54 +91,23 @@ function log(action, payload){
 const CLOUD = { col: 'kanban', doc: 'state' };
 let cloudSaveTimer = null;
 let unsubSnapshot = null;
+const docRef = db ? doc(db, CLOUD.col, CLOUD.doc) : null;
 
 function scheduleCloudSave(){
-  if (!db) return;
+  if (!docRef) return;
   clearTimeout(cloudSaveTimer);
   cloudSaveTimer = setTimeout(async ()=>{
-    try { await db.collection(CLOUD.col).doc(CLOUD.doc).set(state); }
+    try { await setDoc(docRef, state); }
     catch(err){ console.warn('cloudSave error', err); }
   }, 400);
 }
 
-async function cloudLoad(){ // (queda por compatibilidad pero no se llama en el boot)
-  if (!db) return;
-  try{
-    const snap = await db.collection(CLOUD.col).doc(CLOUD.doc).get();
-    if (snap.exists){
-      const cloud = snap.data() || {};
-      state = {
-        ...state,
-        ...cloud,
-        tasks: cloud.tasks || state.tasks || [],
-        tipos: cloud.tipos || state.tipos || [],
-        techs: cloud.techs || state.techs || [],
-        products: cloud.products || state.products || [],
-        settings: cloud.settings || state.settings || {},
-        log: cloud.log || state.log || [],
-      };
-      // persistimos local
-      saveLS(LS_KEYS.tasks, state.tasks);
-      saveLS(LS_KEYS.tipos, state.tipos);
-      saveLS(LS_KEYS.techs, state.techs);
-      saveLS(LS_KEYS.products, state.products);
-      saveLS(LS_KEYS.settings, state.settings);
-      saveLS(LS_KEYS.log, state.log);
-      renderBoard();
-    }
-  }catch(err){ console.warn('cloudLoad error', err); }
-}
-
-// NUEVO: asegura doc en nube (si no existe, sube tu local) y suscribe onSnapshot
 async function ensureCloudAndSubscribe(){
-  if (!db) return;
-
-  const ref = db.collection(CLOUD.col).doc(CLOUD.doc);
-
+  if (!docRef) return;
   try {
-    const snap = await ref.get();
-    if (!snap.exists) {
-      await ref.set(state); // primer push con tu estado local
+    const snap = await getDoc(docRef);
+    if (!snap.exists()) {
+      await setDoc(docRef, state); // primer push con tu estado local
       console.log('Cloud inicializado con estado local.');
     } else {
       const cloud = snap.data() || {};
@@ -139,8 +130,8 @@ async function ensureCloudAndSubscribe(){
     }
 
     if (unsubSnapshot) unsubSnapshot();
-    unsubSnapshot = ref.onSnapshot(docSnap=>{
-      if (!docSnap.exists) return;
+    unsubSnapshot = onSnapshot(docRef, (docSnap)=>{
+      if (!docSnap.exists()) return;
       const cloud = docSnap.data() || {};
       state = {
         ...state,
@@ -166,7 +157,7 @@ async function ensureCloudAndSubscribe(){
 }
 
 /********************
- * Utilidades
+ * Utilidades UI
  ********************/
 function qs(s,el=document){ return el.querySelector(s); }
 function qsa(s,el=document){ return [...el.querySelectorAll(s)]; }
@@ -204,11 +195,11 @@ function nearDeadline(card){
 /********************
  * Filtros y listas auxiliares
  ********************/
-function fillTipoFilters(){ qs('#filterTipo').innerHTML = '<option value="">Tipo: Todos</option>'+state.tipos.map(t=>`<option>${t.name}</option>`).join(''); }
-function fillTipoSelect(){ qs('#f-tipo').innerHTML = state.tipos.map(t=>`<option>${t.name}</option>`).join(''); }
-function fillProductDatalist(){ qs('#datalistProductos').innerHTML = state.products.map(p=>`<option value="${p}"></option>`).join(''); }
+function fillTipoFilters(){ qs('#filterTipo')?.innerHTML = '<option value="">Tipo: Todos</option>'+state.tipos.map(t=>`<option>${t.name}</option>`).join(''); }
+function fillTipoSelect(){ qs('#f-tipo')?.innerHTML = state.tipos.map(t=>`<option>${t.name}</option>`).join(''); }
+function fillProductDatalist(){ qs('#datalistProductos')?.innerHTML = state.products.map(p=>`<option value="${p}"></option>`).join(''); }
 function passFilters(card){
-  const t = qs('#filterTipo').value, u = qs('#filterTurno').value;
+  const t = qs('#filterTipo')?.value, u = qs('#filterTurno')?.value;
   if (t && card.tipo!==t) return false;
   if (u && String(card.turno)!==String(u)) return false;
   return true;
@@ -218,7 +209,7 @@ function passFilters(card){
  * Render tablero
  ********************/
 function renderBoard(){
-  ['diagnostico','reparacion','listo'].forEach(c=> qs('#col-'+c).innerHTML='');
+  ['diagnostico','reparacion','listo'].forEach(c=>{ const col=qs('#col-'+c); if(col) col.innerHTML=''; });
 
   state.tasks.filter(t=>!t.archived).forEach(card=>{
     if(!passFilters(card)) return;
@@ -246,8 +237,9 @@ function renderBoard(){
         <div class="tags"><span>${fmtDate(card.ingreso)}</span><span>${fmtDate(card.limite)}</span></div>
       </div>
     `;
-    el.addEventListener('click', (e)=>{ if(window.innerWidth<=640){ openMobileView(card); } else { openEditor(card.id); } });
-    qs('#col-'+card.col).appendChild(el);
+    el.addEventListener('click', ()=>{ if(window.innerWidth<=640){ openMobileView(card); } else { openEditor(card.id); } });
+    const container = qs('#col-'+card.col);
+    if (container) container.appendChild(el);
   });
 
   hookDnD();
@@ -259,7 +251,6 @@ function renderBoard(){
 let dragId = null;
 
 function hookDnD(){
-  // listeners por tarjeta (se regeneran en cada render)
   qsa('.draggable').forEach(el=>{
     el.addEventListener('dragstart', (e)=>{
       dragId = el.dataset.id;
@@ -275,7 +266,6 @@ function hookDnD(){
       el.classList.remove('dragging','drag-hover','drag-target-before','drag-target-after');
     });
 
-    // marcador antes/después según mitad vertical
     el.addEventListener('dragover', (e)=>{
       if(!dragId || el.dataset.id===dragId) return;
       e.preventDefault();
@@ -302,13 +292,11 @@ function hookDnD(){
       const rect = el.getBoundingClientRect();
       const before = e.clientY < (rect.top + rect.height/2);
 
-      // mover en array
       const from = state.tasks.findIndex(t=>t.id===dragged.id);
       state.tasks.splice(from,1);
       const to = state.tasks.findIndex(t=>t.id===target.id);
       state.tasks.splice(before ? to : to+1, 0, dragged);
 
-      // sincronizar columna si cambió
       const oldCol = dragged.col;
       dragged.col = target.col;
       if (oldCol !== dragged.col) log('move',{id:dragged.id, col:dragged.col});
@@ -318,10 +306,8 @@ function hookDnD(){
       persistTasks(); renderBoard();
     });
   });
-}
 
-// drop en vacío de columna = enviar al final de esa columna
-(function bindStaticDnD(){
+  // drop en vacío de columna = al final
   qsa('.column').forEach(col=>{
     col.addEventListener('dragover',(e)=>{ e.preventDefault(); });
     col.addEventListener('drop',(e)=>{
@@ -331,18 +317,21 @@ function hookDnD(){
       state.tasks.splice(from,1);
       card.col = col.dataset.col;
       card.updatedAt = now();
-      state.tasks.push(card); // al final
+      state.tasks.push(card);
       log('move',{id:card.id, col:card.col});
       persistTasks(); renderBoard();
     });
   });
-  const bar = qs('#archiveBar');
-  bar.addEventListener('dragover',(e)=>{ e.preventDefault(); bar.classList.add('active'); });
-  bar.addEventListener('dragleave',()=>{ bar.classList.remove('active'); });
-  bar.addEventListener('drop',(e)=>{ e.preventDefault(); bar.classList.remove('active'); if(!dragId) return; archiveTask(dragId); dragId=null; showArchive(false); });
-})();
 
-function showArchive(show){ qs('#archiveBar').classList.toggle('show', !!show); }
+  const bar = qs('#archiveBar');
+  if (bar){
+    bar.addEventListener('dragover',(e)=>{ e.preventDefault(); bar.classList.add('active'); });
+    bar.addEventListener('dragleave',()=>{ bar.classList.remove('active'); });
+    bar.addEventListener('drop',(e)=>{ e.preventDefault(); bar.classList.remove('active'); if(!dragId) return; archiveTask(dragId); dragId=null; showArchive(false); });
+  }
+}
+
+function showArchive(show){ qs('#archiveBar')?.classList.toggle('show', !!show); }
 function archiveTask(id){
   const t = state.tasks.find(x=>x.id===id); if(!t) return;
   t.archived = true; t.archivedAt = now();
@@ -350,7 +339,7 @@ function archiveTask(id){
 }
 
 /********************
- * Editor de tarjeta
+ * Editor de tarjeta (tu UI)
  ********************/
 let editingId = null;
 
@@ -359,6 +348,7 @@ function fromLocalInput(val){ if(!val) return null; const d=new Date(val); const
 
 function addTechChip(idx){
   const wrap = qs('#techList');
+  if(!wrap) return;
   const row = document.createElement('div'); row.className='row';
   row.innerHTML = `
     <select class="techSel">${state.techs.map((t,i)=>`<option value="${i}" ${i==idx?'selected':''}>${t.name}</option>`).join('')}</select>
@@ -374,52 +364,52 @@ function addTechChip(idx){
 
 function openEditor(id){
   editingId = id || null;
-  const dr = qs('#drawer'); dr.classList.add('open');
-  qs('#techList').innerHTML = '';
+  const dr = qs('#drawer'); if(dr) dr.classList.add('open');
+  const techList = qs('#techList'); if(techList) techList.innerHTML = '';
 
   let data = { col:'diagnostico', turno:1, compact:1, tipo:state.tipos[0]?.name, techIds:[], ingreso: new Date().toISOString().slice(0,16) };
   if (id){ const t = state.tasks.find(x=>x.id===id); if(t) data = {...data, ...t}; }
 
-  qs('#f-ot').value = data.ot||'';
-  qs('#f-producto').value = data.producto||'';
-  qs('#f-marca').value = data.marca||'';
-  qs('#f-modelo').value = data.modelo||'';
-  qs('#f-cliente').value = data.cliente||'';
-  qs('#f-turno').value = data.turno||1;
-  qs('#f-desc').value = data.desc||'';
-  qs('#f-ingreso').value = toLocalInput(data.ingreso);
-  qs('#f-limite').value = toLocalInput(data.limite);
-  qs('#f-tipo').value = data.tipo||state.tipos[0]?.name;
-  qs('#f-color').value = data.color || '';
-  qs('#f-col').value = data.col||'diagnostico';
-  qs('#f-compact').value = Number(data.compact||1);
+  qs('#f-ot')?.value = data.ot||'';
+  qs('#f-producto')?.value = data.producto||'';
+  qs('#f-marca')?.value = data.marca||'';
+  qs('#f-modelo')?.value = data.modelo||'';
+  qs('#f-cliente')?.value = data.cliente||'';
+  if(qs('#f-turno')) qs('#f-turno').value = data.turno||1;
+  qs('#f-desc')?.value = data.desc||'';
+  if(qs('#f-ingreso')) qs('#f-ingreso').value = toLocalInput(data.ingreso);
+  if(qs('#f-limite'))  qs('#f-limite').value  = toLocalInput(data.limite);
+  if(qs('#f-tipo'))    qs('#f-tipo').value    = data.tipo||state.tipos[0]?.name;
+  if(qs('#f-color'))   qs('#f-color').value   = data.color || '';
+  if(qs('#f-col'))     qs('#f-col').value     = data.col||'diagnostico';
+  if(qs('#f-compact')) qs('#f-compact').value = Number(data.compact||1);
   (data.techIds||[]).forEach(addTechChip);
 }
 
-qs('#btnAddTech').onclick = ()=> addTechChip(0);
-qs('#btnCancel').onclick = ()=> qs('#drawer').classList.remove('open');
-qs('#btnDelete').onclick = ()=>{
-  if(!editingId){ qs('#drawer').classList.remove('open'); return; }
+qs('#btnAddTech')?.addEventListener('click', ()=> addTechChip(0));
+qs('#btnCancel')?.addEventListener('click', ()=> qs('#drawer')?.classList.remove('open'));
+qs('#btnDelete')?.addEventListener('click', ()=>{
+  if(!editingId){ qs('#drawer')?.classList.remove('open'); return; }
   state.tasks = state.tasks.filter(t=>t.id!==editingId);
-  log('delete',{id:editingId}); persistTasks(); renderBoard(); qs('#drawer').classList.remove('open');
-};
-qs('#btnSave').onclick = ()=>{
+  log('delete',{id:editingId}); persistTasks(); renderBoard(); qs('#drawer')?.classList.remove('open');
+});
+qs('#btnSave')?.addEventListener('click', ()=>{
   const n = {
     id: editingId || 't_'+Math.random().toString(36).slice(2,9),
-    ot: qs('#f-ot').value.trim(),
-    producto: qs('#f-producto').value.trim(),
-    marca: qs('#f-marca').value.trim(),
-    modelo: qs('#f-modelo').value.trim(),
-    cliente: qs('#f-cliente').value.trim(),
-    turno: Number(qs('#f-turno').value),
-    desc: qs('#f-desc').value.trim(),
-    ingreso: fromLocalInput(qs('#f-ingreso').value),
-    limite: fromLocalInput(qs('#f-limite').value),
-    tipo: qs('#f-tipo').value,
-    color: (/^#[0-9A-Fa-f]{6}$/.test(qs('#f-color').value) && qs('#f-color').value!=='#000000') ? qs('#f-color').value : null,
-    col: qs('#f-col').value,
-    compact: Number(qs('#f-compact').value),
-    techIds: [...qs('#techList').querySelectorAll('.techSel')].map(s=>Number(s.value)).slice(0,4),
+    ot: qs('#f-ot')?.value.trim(),
+    producto: qs('#f-producto')?.value.trim(),
+    marca: qs('#f-marca')?.value.trim(),
+    modelo: qs('#f-modelo')?.value.trim(),
+    cliente: qs('#f-cliente')?.value.trim(),
+    turno: Number(qs('#f-turno')?.value),
+    desc: qs('#f-desc')?.value.trim(),
+    ingreso: fromLocalInput(qs('#f-ingreso')?.value),
+    limite: fromLocalInput(qs('#f-limite')?.value),
+    tipo: qs('#f-tipo')?.value,
+    color: (/^#[0-9A-Fa-f]{6}$/.test(qs('#f-color')?.value) && qs('#f-color')?.value!=='#000000') ? qs('#f-color')?.value : null,
+    col: qs('#f-col')?.value,
+    compact: Number(qs('#f-compact')?.value),
+    techIds: [...(qs('#techList')?.querySelectorAll('.techSel')||[])].map(s=>Number(s.value)).slice(0,4),
     updatedAt: now(),
   };
 
@@ -435,8 +425,8 @@ qs('#btnSave').onclick = ()=>{
   if(i>=0){ state.tasks[i]=n; log('update',{id:n.id}); }
   else { state.tasks.push(n); log('create',{id:n.id}); }
 
-  persistTasks(); renderBoard(); qs('#drawer').classList.remove('open');
-};
+  persistTasks(); renderBoard(); qs('#drawer')?.classList.remove('open');
+});
 
 function persistTasks(){ saveLS(LS_KEYS.tasks, state.tasks); scheduleCloudSave(); }
 
@@ -444,7 +434,8 @@ function persistTasks(){ saveLS(LS_KEYS.tasks, state.tasks); scheduleCloudSave()
  * Ajustes
  ********************/
 function renderSettings(){
-  const wrap=qs('#tipoColors'); wrap.innerHTML='';
+  const wrap=qs('#tipoColors'); if(!wrap) return;
+  wrap.innerHTML='';
   state.tipos.forEach((t,i)=>{
     const row=document.createElement('div'); row.className='row';
     row.innerHTML = `
@@ -454,13 +445,13 @@ function renderSettings(){
     `;
     wrap.appendChild(row);
   });
-  qs('#st-budgetMaxH').value=state.settings.budgetMaxH;
-  qs('#st-deliveryMinH').value=state.settings.deliveryMinH;
-  qs('#st-deliveryMaxH').value=state.settings.deliveryMaxH;
-  qs('#st-glowBudgetH').value=state.settings.glowBudgetH;
-  qs('#st-glowDeliveryH').value=state.settings.glowDeliveryH;
+  if(qs('#st-budgetMaxH')) qs('#st-budgetMaxH').value=state.settings.budgetMaxH;
+  if(qs('#st-deliveryMinH')) qs('#st-deliveryMinH').value=state.settings.deliveryMinH;
+  if(qs('#st-deliveryMaxH')) qs('#st-deliveryMaxH').value=state.settings.deliveryMaxH;
+  if(qs('#st-glowBudgetH'))  qs('#st-glowBudgetH').value =state.settings.glowBudgetH;
+  if(qs('#st-glowDeliveryH'))qs('#st-glowDeliveryH').value=state.settings.glowDeliveryH;
 
-  const tw=qs('#settingsTech'); tw.innerHTML='';
+  const tw=qs('#settingsTech'); if(!tw) return; tw.innerHTML='';
   state.techs.forEach((t,i)=>{
     const row=document.createElement('div'); row.className='row';
     row.innerHTML = `
@@ -471,9 +462,9 @@ function renderSettings(){
     tw.appendChild(row);
   });
 }
-function openSettings(){ qs('#settings').classList.add('open'); renderSettings(); }
+function openSettings(){ qs('#settings')?.classList.add('open'); renderSettings(); }
 function closeSettings(){
-  qs('#settings').classList.remove('open');
+  qs('#settings')?.classList.remove('open');
   saveLS(LS_KEYS.tipos,state.tipos);
   saveLS(LS_KEYS.settings,state.settings);
   saveLS(LS_KEYS.techs,state.techs);
@@ -481,30 +472,30 @@ function closeSettings(){
   scheduleCloudSave();
 }
 
-qs('#btnSettings').onclick=openSettings;
-qs('#btnCloseSettings').onclick=closeSettings;
-qs('#btnAddTipo').onclick=()=>{ state.tipos.push({name:'Nuevo Tipo', color:'#8888ff'}); saveLS(LS_KEYS.tipos,state.tipos); renderSettings(); fillTipoFilters(); fillTipoSelect(); renderBoard(); scheduleCloudSave(); };
-qs('#tipoColors').addEventListener('input',(e)=>{
+qs('#btnSettings')?.addEventListener('click',openSettings);
+qs('#btnCloseSettings')?.addEventListener('click',closeSettings);
+qs('#btnAddTipo')?.addEventListener('click',()=>{ state.tipos.push({name:'Nuevo Tipo', color:'#8888ff'}); saveLS(LS_KEYS.tipos,state.tipos); renderSettings(); fillTipoFilters(); fillTipoSelect(); renderBoard(); scheduleCloudSave(); });
+qs('#tipoColors')?.addEventListener('input',(e)=>{
   if(e.target.classList.contains('tipoName')){ const i=+e.target.dataset.idx; state.tipos[i].name=e.target.value; saveLS(LS_KEYS.tipos,state.tipos); fillTipoFilters(); fillTipoSelect(); renderBoard(); scheduleCloudSave(); }
   if(e.target.classList.contains('tipoColor')){ const i=+e.target.dataset.idx; state.tipos[i].color=e.target.value; saveLS(LS_KEYS.tipos,state.tipos); renderBoard(); scheduleCloudSave(); }
 });
-qs('#tipoColors').addEventListener('click',(e)=>{
+qs('#tipoColors')?.addEventListener('click',(e)=>{
   if(e.target.classList.contains('delTipo')){ const i=+e.target.dataset.idx; state.tipos.splice(i,1); saveLS(LS_KEYS.tipos,state.tipos); renderSettings(); fillTipoFilters(); fillTipoSelect(); renderBoard(); scheduleCloudSave(); }
 });
-qs('#btnAddSettingsTech').onclick=()=>{ state.techs.push({name:'Nuevo técnico', color:'#cccc55'}); saveLS(LS_KEYS.techs,state.techs); renderSettings(); scheduleCloudSave(); };
-qs('#settingsTech').addEventListener('input',(e)=>{
+qs('#btnAddSettingsTech')?.addEventListener('click',()=>{ state.techs.push({name:'Nuevo técnico', color:'#cccc55'}); saveLS(LS_KEYS.techs,state.techs); renderSettings(); scheduleCloudSave(); });
+qs('#settingsTech')?.addEventListener('input',(e)=>{
   if(e.target.classList.contains('st-techName')){ const i=+e.target.dataset.idx; state.techs[i].name=e.target.value; saveLS(LS_KEYS.techs,state.techs); scheduleCloudSave(); }
   if(e.target.classList.contains('st-techColor')){ const i=+e.target.dataset.idx; state.techs[i].color=e.target.value; saveLS(LS_KEYS.techs,state.techs); renderBoard(); scheduleCloudSave(); }
 });
-qs('#settingsTech').addEventListener('click',(e)=>{
+qs('#settingsTech')?.addEventListener('click',(e)=>{
   if(e.target.classList.contains('delSettingsTech')){ const i=+e.target.dataset.idx; state.techs.splice(i,1); saveLS(LS_KEYS.techs,state.techs); renderSettings(); renderBoard(); scheduleCloudSave(); }
 });
 
 /********************
  * Export CSV + filtros
  ********************/
-qs('#filterTipo').addEventListener('change',renderBoard);
-qs('#filterTurno').addEventListener('change',renderBoard);
+qs('#filterTipo')?.addEventListener('change',renderBoard);
+qs('#filterTurno')?.addEventListener('change',renderBoard);
 
 function toCSV(rows){
   return rows.map(r=>r.map(cell=>{
@@ -518,7 +509,7 @@ function downloadFile(txt, filename, mime){
   const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=filename; a.click();
   setTimeout(()=>URL.revokeObjectURL(a.href),2000);
 }
-qs('#btnExport').onclick = ()=>{
+qs('#btnExport')?.addEventListener('click', ()=>{
   const rows = [
     ['id','OT','Producto','Marca','Modelo','Cliente','Turno','Descripción','Ingreso','Límite','Tipo','Color','Columna','Técnicos','BudgetDue','DeliveryDue','UpdatedAt','Archived'],
     ...state.tasks.map(t=>[
@@ -530,13 +521,14 @@ qs('#btnExport').onclick = ()=>{
   const base = 'export_kanban_'+new Date().toISOString().replace(/[:.]/g,'-');
   downloadFile(csv1, base+'_data.csv', 'text/csv');
   downloadFile(csv2, base+'_log.csv', 'text/csv');
-};
+});
 
 /********************
  * Visor móvil
  ********************/
 function openMobileView(card){
   const mv=qs('#mv'), sheet=qs('#mvSheet');
+  if(!mv || !sheet) return;
   const bg=card.color||cardColorForTipo(card.tipo), fg=contrastColor(bg);
   sheet.style.background=`linear-gradient(180deg, ${bg} 0%, ${shade(bg,-14)} 100%)`;
   sheet.style.color=fg;
@@ -551,18 +543,17 @@ function openMobileView(card){
   mv.onclick = ()=> closeMobileView();
   sheet.onclick = (ev)=> ev.stopPropagation();
 
-  // Cerrar deslizando hacia arriba
   let startY=null, allow=false;
   sheet.addEventListener('touchstart',(e)=>{ startY=e.touches[0].clientY; const r=sheet.getBoundingClientRect(); allow=(startY-r.top)<=60; },{passive:true});
   sheet.addEventListener('touchmove',(e)=>{ if(!allow||startY===null) return; const dy=e.touches[0].clientY-startY; if(dy<-80){ closeMobileView(); startY=null; allow=false; } },{passive:true});
   sheet.addEventListener('touchend',()=>{ startY=null; allow=false; });
 }
-function closeMobileView(){ qs('#mv').classList.remove('open'); }
+function closeMobileView(){ qs('#mv')?.classList.remove('open'); }
 
 /********************
  * FAB + Init
  ********************/
-qs('#fab').onclick = ()=> openEditor(null);
+qs('#fab')?.addEventListener('click', ()=> openEditor(null));
 
 function init(){
   fillTipoFilters(); fillTipoSelect(); fillProductDatalist(); renderBoard();
@@ -576,8 +567,6 @@ function init(){
     demo.forEach(d=>{ d.id='t_'+Math.random().toString(36).slice(2,9); d.color=null; d.budgetDue=new Date(Date.now()+toMs(state.settings.budgetMaxH)).toISOString(); d.deliveryDue=new Date(Date.now()+toMs(state.settings.deliveryMaxH)).toISOString(); d.updatedAt=now(); });
     state.tasks = demo; persistTasks(); log('seed',{count:demo.length});
   }
-
-  // (OJO) Ya no llamamos cloudLoad() acá. El boot maneja la nube primero.
 }
 
 // Boot: si hay Firestore, asegura doc + escucha, luego init
@@ -585,6 +574,8 @@ function init(){
   if (db) { await ensureCloudAndSubscribe(); }
   init();
 })();
+
+
 
 
 
