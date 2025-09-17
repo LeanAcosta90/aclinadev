@@ -87,7 +87,7 @@ async function cloudLoad(){
         settings: cloud.settings || state.settings || {},
         log: cloud.log || state.log || [],
       };
-      // persistimos local
+      // persistimos local (modo offline)
       saveLS(LS_KEYS.tasks, state.tasks);
       saveLS(LS_KEYS.tipos, state.tipos);
       saveLS(LS_KEYS.techs, state.techs);
@@ -138,7 +138,7 @@ function nearDeadline(card){
 /********************
  * Filtros y listas auxiliares
  ********************/
-function fillTipoFilters(){ qs('#filterTipo').innerHTML = '<option value=\"\">Tipo: Todos</option>'+state.tipos.map(t=>`<option>${t.name}</option>`).join(''); }
+function fillTipoFilters(){ qs('#filterTipo').innerHTML = '<option value="">Tipo: Todos</option>'+state.tipos.map(t=>`<option>${t.name}</option>`).join(''); }
 function fillTipoSelect(){ qs('#f-tipo').innerHTML = state.tipos.map(t=>`<option>${t.name}</option>`).join(''); }
 function fillProductDatalist(){ qs('#datalistProductos').innerHTML = state.products.map(p=>`<option value="${p}"></option>`).join(''); }
 function passFilters(card){
@@ -160,7 +160,6 @@ function renderBoard(){
     el.className='card draggable'; el.draggable=true; el.dataset.id=card.id;
     if(!!Number(card.compact)) el.classList.add('compact');
 
-    // anillos técnico
     if((card.techIds||[]).length) el.dataset.techRings='1';
     Object.entries(techRingsStyles(card.techIds)).forEach(([k,v])=> el.style.setProperty(k,v));
     ['ring0','ring1','ring2','ring3'].forEach((cls,idx)=>{ if(el.style.getPropertyValue(`--ring${idx}`)) el.classList.add(cls); });
@@ -193,7 +192,6 @@ function renderBoard(){
 let dragId = null;
 
 function hookDnD(){
-  // listeners por tarjeta (se regeneran en cada render)
   qsa('.draggable').forEach(el=>{
     el.addEventListener('dragstart', (e)=>{
       dragId = el.dataset.id;
@@ -209,7 +207,6 @@ function hookDnD(){
       el.classList.remove('dragging','drag-hover','drag-target-before','drag-target-after');
     });
 
-    // marcador antes/después según mitad vertical
     el.addEventListener('dragover', (e)=>{
       if(!dragId || el.dataset.id===dragId) return;
       e.preventDefault();
@@ -236,13 +233,11 @@ function hookDnD(){
       const rect = el.getBoundingClientRect();
       const before = e.clientY < (rect.top + rect.height/2);
 
-      // mover en array
       const from = state.tasks.findIndex(t=>t.id===dragged.id);
       state.tasks.splice(from,1);
       const to = state.tasks.findIndex(t=>t.id===target.id);
       state.tasks.splice(before ? to : to+1, 0, dragged);
 
-      // sincronizar columna si cambió
       const oldCol = dragged.col;
       dragged.col = target.col;
       if (oldCol !== dragged.col) log('move',{id:dragged.id, col:dragged.col});
@@ -254,7 +249,6 @@ function hookDnD(){
   });
 }
 
-// drop en vacío de columna = enviar al final de esa columna
 (function bindStaticDnD(){
   qsa('.column').forEach(col=>{
     col.addEventListener('dragover',(e)=>{ e.preventDefault(); });
@@ -494,23 +488,36 @@ function openMobileView(card){
 function closeMobileView(){ qs('#mv').classList.remove('open'); }
 
 /********************
- * FAB + Init
+ * FAB + Init (arranque ordenado)
  ********************/
 qs('#fab').onclick = ()=> openEditor(null);
 
 function init(){
   fillTipoFilters(); fillTipoSelect(); fillProductDatalist(); renderBoard();
 
-  // demo si está vacío
-  if(!state.tasks.length){
+  // Solo seedea demo si NO usamos Firebase (modo 100% local)
+  if(!state.tasks.length && !db){
     const demo=[
-      {ot:'0001', producto:'Notebook', marca:'HP', modelo:'15-dw', cliente:'María P.', turno:1, desc:'Pantalla no enciende', ingreso: now(), limite: new Date(Date.now()+toMs(96)).toISOString(), tipo:'Presupuesto', col:'diagnostico', compact:1, techIds:[0]},
-      {ot:'0002', producto:'Celular', marca:'Samsung', modelo:'A52', cliente:'J. López', turno:2, desc:'Cambio de batería', ingreso: now(), limite: new Date(Date.now()+toMs(72)).toISOString(), tipo:'Aceptado', col:'reparacion', compact:1, techIds:[1]},
+      {ot:'0001', producto:'Notebook', marca:'HP',      modelo:'15-dw', cliente:'María P.', turno:1, desc:'Pantalla no enciende', ingreso: now(), limite: new Date(Date.now()+toMs(96)).toISOString(), tipo:'Presupuesto', col:'diagnostico', compact:1, techIds:[0]},
+      {ot:'0002', producto:'Celular',  marca:'Samsung', modelo:'A52',   cliente:'J. López', turno:2, desc:'Cambio de batería',    ingreso: now(), limite: new Date(Date.now()+toMs(72)).toISOString(), tipo:'Aceptado',    col:'reparacion', compact:1, techIds:[1]},
     ];
-    demo.forEach(d=>{ d.id='t_'+Math.random().toString(36).slice(2,9); d.color=null; d.budgetDue=new Date(Date.now()+toMs(state.settings.budgetMaxH)).toISOString(); d.deliveryDue=new Date(Date.now()+toMs(state.settings.deliveryMaxH)).toISOString(); d.updatedAt=now(); });
+    demo.forEach(d=>{
+      d.id='t_'+Math.random().toString(36).slice(2,9);
+      d.color=null;
+      d.budgetDue=new Date(Date.now()+toMs(state.settings.budgetMaxH)).toISOString();
+      d.deliveryDue=new Date(Date.now()+toMs(state.settings.deliveryMaxH)).toISOString();
+      d.updatedAt=now();
+    });
     state.tasks = demo; persistTasks(); log('seed',{count:demo.length});
   }
-
-  if (db) cloudLoad(); // carga desde Firestore si está habilitado
 }
-init();
+
+// Arranque: primero nube (si hay), luego UI
+(async function boot(){
+  if (db) {
+    try { await cloudLoad(); } 
+    catch(e){ console.warn('cloudLoad fail', e); }
+  }
+  init();
+})();
+
